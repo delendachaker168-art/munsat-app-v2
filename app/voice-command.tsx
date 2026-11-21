@@ -25,14 +25,14 @@ function formatTime(seconds:number){if(!Number.isFinite(seconds)||seconds<0)retu
 export default function VoiceCommand(){
  const [modelReady,setModelReady]=useState(false);const [downloading,setDownloading]=useState(false);const [extracting,setExtracting]=useState(false);const [loadingModel,setLoadingModel]=useState(false);const [listening,setListening]=useState(false);
  const [progress,setProgress]=useState(0);const [speed,setSpeed]=useState(0);const [eta,setEta]=useState(0);const [partial,setPartial]=useState('');const [recognized,setRecognized]=useState('');const [pendingSlot,setPendingSlot]=useState<number|null>(null);const [status,setStatus]=useState('النموذج العربي غير مثبت بعد.');
- const downloadRef=useRef<any>(null);const voskRef=useRef<any>(null);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
+ const downloadRef=useRef<any>(null);const pauseRequestedRef=useRef(false);const voskRef=useRef<any>(null);const modelLoadedRef=useRef(false);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
 
- useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
+ useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
  useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload(true).catch(()=>{});}});return()=>sub.remove();},[]);
 
  async function pauseDownload(silent=false){
   const task=downloadRef.current;if(!task)return;
-  try{await task.pauseAsync();const saved=task.savable?.();if(saved)await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));}catch{}
+  try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved)await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));}catch{}
   downloadRef.current=null;setDownloading(false);if(!silent)setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
  }
  async function downloadModel(){
@@ -64,7 +64,7 @@ export default function VoiceCommand(){
    await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});
    const check=await FileSystem.getInfoAsync(MODEL_PATH);if(!check.exists)throw new Error('فشل التحقق من تثبيت النموذج.');
    setModelReady(true);setStatus('النموذج مثبت وجاهز للتعرف دون إنترنت.');
-  }catch(e:any){setDownloading(false);setStatus('تعذر إكمال التنزيل أو التثبيت. يمكنك المحاولة أو الاستكمال.');Alert.alert('تعذر تثبيت النموذج',e?.message||'تحقق من اتصال الإنترنت والمساحة المتاحة.');}
+  }catch(e:any){setDownloading(false);if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}setStatus('تعذر إكمال التنزيل أو التثبيت. يمكنك المحاولة أو الاستكمال.');Alert.alert('تعذر تثبيت النموذج',e?.message||'تحقق من اتصال الإنترنت والمساحة المتاحة.');}
   finally{setExtracting(false);}
  }
 
@@ -76,7 +76,7 @@ export default function VoiceCommand(){
   setLoadingModel(true);setStatus('جارٍ تحميل النموذج في الذاكرة…');
   try{
    if(!voskRef.current)voskRef.current=new Vosk();
-   await voskRef.current.loadModel(MODEL_PATH);
+   if(!modelLoadedRef.current){await voskRef.current.loadModel(MODEL_PATH);modelLoadedRef.current=true;}
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
    listenersRef.current.push(voskRef.current.onPartialResult((text:string)=>setPartial(text)));
    listenersRef.current.push(voskRef.current.onResult((text:string)=>{
@@ -90,7 +90,7 @@ export default function VoiceCommand(){
  }
  function stopListening(){try{voskRef.current?.stop();}catch{}setListening(false);setStatus('توقف الاستماع.');}
  async function confirmCommand(){
-  if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();}catch{}setPendingSlot(null);
+  if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}setPendingSlot(null);
   router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1'}});
  }
  const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':'تنزيل النموذج العربي';
