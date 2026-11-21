@@ -97,11 +97,11 @@ export default function VoiceCommand(){
    listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
    listenersRef.current.push(voskRef.current.onResult((value:any)=>{
     if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();MunsatForegroundService.stop();setListening(false);
-    const slot=parseSlot(text);if(slot)setPendingSlot(slot);else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
+    const slot=parseSlot(text);if(slot){setStatus('تم التعرف على الخانة '+slot+'؛ جارٍ فتحها وبدء التسجيل.');router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});}else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
    }));
    listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');MunsatForegroundService.stop();setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
    if(foregroundEnabled){try{foregroundEnabled=MunsatForegroundService.start();}catch{foregroundEnabled=false;}}
-   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن في الخلفية أيضًا؛ قل: محادثة واحد إلى خمسة.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
+   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن؛ قل: محادثة واحد إلى خمسة لبدء التسجيل.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
   }catch(e:any){MunsatForegroundService.stop();setListening(false);setStatus('تعذر تحميل النموذج.');Alert.alert('تعذر تشغيل النموذج',e?.message||'أعد المحاولة.');}
   finally{setLoadingModel(false);}
  }
