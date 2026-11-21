@@ -12,7 +12,7 @@ export default function Profile(){
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;
   const permission=await ImagePicker.requestMediaLibraryPermissionsAsync();if(!permission.granted){Alert.alert('إذن الصور','اسمح لمنصت بالوصول إلى الصور لاختيار صورة الملف الشخصي.');return;}
   const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:true,aspect:[1,1],quality:0.8});
-  if(result.canceled||!result.assets?.[0])return;const asset=result.assets[0];const mime=asset.mimeType||'image/jpeg';
+  if(result.canceled||!result.assets?.[0])return;const asset=result.assets[0];const fileName=asset.fileName?.toLowerCase()||'';const mime=asset.mimeType||(fileName.endsWith('.png')?'image/png':fileName.endsWith('.webp')?'image/webp':'image/jpeg');
   if(!['image/jpeg','image/png','image/webp'].includes(mime)){Alert.alert('صيغة غير مدعومة','اختر صورة بصيغة JPG أو PNG أو WEBP.');return;}
   setPhotoBusy(true);
   try{
