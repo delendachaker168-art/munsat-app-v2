@@ -20,7 +20,7 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
     if(!localUri){
      const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,600);
      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
-     localUri=await cacheVoiceMessage(message.id,data.signedUrl);
+     localUri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
      await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
     }
     player.replace(localUri);
