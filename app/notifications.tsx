@@ -1,0 +1,14 @@
+import { useCallback,useEffect,useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { supabase } from '../src/lib/supabase';
+type Notice={id:string;type:string;title:string;body:string|null;read_at:string|null;created_at:string};
+export default function Notifications(){const [items,setItems]=useState<Notice[]>([]);const [busy,setBusy]=useState(false);
+ const load=useCallback(async()=>{const {data,error}=await supabase.from('notifications').select('id,type,title,body,read_at,created_at').order('created_at',{ascending:false}).limit(50);if(error)Alert.alert('تعذر تحميل الإشعارات',error.message);else setItems((data||[]) as Notice[]);},[]);
+ useEffect(()=>{load();},[load]);
+ async function markRead(id:string){const {error}=await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',id);if(error)Alert.alert('تعذر تحديث الإشعار',error.message);else setItems(v=>v.map(x=>x.id===id?{...x,read_at:new Date().toISOString()}:x));}
+ async function markAll(){setBusy(true);const {error}=await supabase.from('notifications').update({read_at:new Date().toISOString()}).is('read_at',null);setBusy(false);if(error)Alert.alert('تعذر تحديث الإشعارات',error.message);else load();}
+ return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}><View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',color:'#111'}}>الإشعارات</Text><Pressable onPress={()=>router.back()}><Text style={{color:'#4F9864'}}>رجوع</Text></Pressable></View>
+ <Pressable disabled={busy||items.every(x=>x.read_at)} onPress={markAll} style={{alignSelf:'flex-start',backgroundColor:'#F0F2F0',paddingHorizontal:14,paddingVertical:9,borderRadius:9,marginTop:18}}><Text style={{color:'#444'}}>{busy?'جارٍ التحديث…':'قراءة الكل'}</Text></Pressable>
+ {items.length===0?<Text style={{textAlign:'right',color:'#888',marginTop:25}}>لا توجد إشعارات حتى الآن.</Text>:items.map(n=><Pressable key={n.id} onPress={()=>!n.read_at&&markRead(n.id)} style={{backgroundColor:n.read_at?'#F5F5F5':'#EAF5EC',padding:16,borderRadius:13,marginTop:12,borderRightWidth:3,borderRightColor:n.read_at?'#DDD':'#78B98A'}}><Text style={{textAlign:'right',fontSize:16,fontWeight:'800',color:'#222'}}>{n.title}</Text><Text style={{textAlign:'right',color:'#666',marginTop:6,lineHeight:22}}>{n.body||''}</Text><Text style={{textAlign:'right',fontSize:11,color:'#999',marginTop:8}}>{new Date(n.created_at).toLocaleString('ar')}{n.read_at?' · مقروء':' · جديد'}</Text></Pressable>)}
+ </ScrollView>}
