@@ -7,25 +7,31 @@ import { supabase } from '../../src/lib/supabase';
 import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
-type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
+type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; deleted_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
 const green='#8BC99A';
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
 function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void}){
- const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);const [loadedMessageId,setLoadedMessageId]=useState<string|null>(null);
+ const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);const [loadedMessageId,setLoadedMessageId]=useState<string|null>(null);const [hasLocalCopy,setHasLocalCopy]=useState(false);
+ useEffect(()=>{let active=true;getCachedVoiceUri(message.id).then(uri=>{if(active)setHasLocalCopy(Boolean(uri));});return()=>{active=false;};},[message.id]);
  async function play(){
   if(status.playing){player.pause();return;}
   setLoading(true);
   try{
    if(loadedMessageId!==message.id){
     let uri:string;
-    if(message.recipient_id===currentUserId){
+    if(message.deleted_at){
+     const cached=await getCachedVoiceUri(message.id);
+     if(!cached)throw new Error('انتهت مدة التخزين السحابي ولم تحفظ نسخة محلية على هذا الجهاز.');
+     uri=cached;setHasLocalCopy(true);
+    }else if(message.recipient_id===currentUserId){
      const cached=await getCachedVoiceUri(message.id);
      if(cached)uri=cached;
      else{
       const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,3600);
       if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
       uri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
+      setHasLocalCopy(true);
       await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
      }
     }else{
@@ -43,10 +49,10 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
   finally{setLoading(false);}
  }
  return <View style={{padding:15,backgroundColor:'#F4F5F4',borderRadius:12,marginBottom:9}}>
-  <View style={{flexDirection:'row-reverse',alignItems:'center',gap:9}}>{message.sender_id!==currentUserId&&message.sender?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(message.sender.avatar_key).data.publicUrl}} style={{width:34,height:34,borderRadius:17}}/>:null}<View style={{flex:1}}><Text style={{textAlign:'right',fontWeight:'700',color:'#333'}}>{message.sender_id===currentUserId?'إلى '+(message.recipient?.display_name||'صديق'):'من '+(message.sender?.display_name||'صديق')} · {fmt(message.duration_ms)}</Text>{message.recipient_id===currentUserId?<Text style={{textAlign:'right',fontSize:11,color:'#888',marginTop:3}}>{message.listened_at?'تم الاستماع':'لم تُسمع بعد'}</Text>:null}</View></View>
+  <View style={{flexDirection:'row-reverse',alignItems:'center',gap:9}}>{message.sender_id!==currentUserId&&message.sender?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(message.sender.avatar_key).data.publicUrl}} style={{width:34,height:34,borderRadius:17}}/>:null}<View style={{flex:1}}><Text style={{textAlign:'right',fontWeight:'700',color:'#333'}}>{message.sender_id===currentUserId?'إلى '+(message.recipient?.display_name||'صديق'):'من '+(message.sender?.display_name||'صديق')} · {fmt(message.duration_ms)}</Text>{message.deleted_at?<Text style={{textAlign:'right',fontSize:11,color:'#888',marginTop:3}}>{hasLocalCopy?'نسخة محلية محفوظة على الجهاز':'انتهت مدة التخزين السحابي'}</Text>:message.recipient_id===currentUserId?<Text style={{textAlign:'right',fontSize:11,color:'#888',marginTop:3}}>{message.listened_at?'تم الاستماع':'لم تُسمع بعد'}</Text>:null}</View></View>
   <Text style={{textAlign:'right',color:'#888',fontSize:12,marginTop:5}}>{new Date(message.created_at).toLocaleString('ar')}</Text>
-  <Pressable onPress={play} disabled={loading} style={{alignSelf:'flex-end',backgroundColor:green,paddingHorizontal:18,paddingVertical:9,borderRadius:9,marginTop:10}}>
-   <Text style={{color:'#17351E',fontWeight:'700'}}>{loading?'جارٍ التحميل…':status.playing?'إيقاف مؤقت':'استماع'}</Text>
+  <Pressable onPress={play} disabled={loading||(Boolean(message.deleted_at)&&!hasLocalCopy)} style={{alignSelf:'flex-end',backgroundColor:green,paddingHorizontal:18,paddingVertical:9,borderRadius:9,marginTop:10}}>
+   <Text style={{color:'#17351E',fontWeight:'700'}}>{loading?'جارٍ التحميل…':status.playing?'إيقاف مؤقت':message.deleted_at?'استماع للنسخة المحلية':'استماع'}</Text>
   </Pressable>
  </View>;
 }
