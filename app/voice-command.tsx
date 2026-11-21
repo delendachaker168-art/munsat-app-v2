@@ -19,7 +19,7 @@ const GRAMMAR=['محادثة واحد','محادثة 1','محادثة الأول
 
 function normalize(text:string){return text.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
 function resultText(value:any):string{if(typeof value==='string')return value;if(value&&typeof value.text==='string')return value.text;if(value&&typeof value.result==='string')return value.result;return '';}
-function parseSlot(value:string):number|null{const t=normalize(value);const patterns:[number,RegExp][]=[[1,/(محادثه|محادثة) (واحد|1|الاولى)/],[2,/(محادثه|محادثة) (اثنين|اثنان|2|الثانيه)/],[3,/(محادثه|محادثة) (ثلاثه|ثلاثة|3|الثالثه)/],[4,/(محادثه|محادثة) (اربعه|أربعة|4|الرابعه)/],[5,/(محادثه|محادثة) (خمسه|خمسة|5|الخامسه)/]];for(const [n,re] of patterns)if(re.test(t))return n;return null;}
+function parseSlot(value:string):number|null{const t=normalize(value);const patterns:[number,RegExp][]=[[1,/(محادثه|محادثة) (واحد|1|الاولى)/],[2,/(محادثه|محادثة) (اثنين|اثنان|2|الثانيه|الثانية)/],[3,/(محادثه|محادثة) (ثلاثه|ثلاثة|3|الثالثه|الثالثة)/],[4,/(محادثه|محادثة) (اربعه|اربعة|أربعة|4|الرابعه|الرابعة)/],[5,/(محادثه|محادثة) (خمسه|خمسة|5|الخامسه|الخامسة)/]];for(const [n,re] of patterns)if(re.test(t))return n;return null;}
 function formatBytes(n:number){if(n<1024*1024)return Math.round(n/1024)+' KB';return (n/1024/1024).toFixed(1)+' MB';}
 function formatTime(seconds:number){if(!Number.isFinite(seconds)||seconds<0)return '—';const m=Math.floor(seconds/60);const s=Math.floor(seconds%60);return m?m+' د '+s+' ث':s+' ث';}
 
