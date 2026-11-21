@@ -5,7 +5,11 @@ import { pruneExpiredVoiceCache } from '../src/lib/local-audio';
 
 export default function RootLayout() {
   useEffect(() => {
-    const cleanup = () => pruneExpiredVoiceCache().catch(() => {});\n    cleanup();\n    const interval = setInterval(cleanup, 24 * 60 * 60 * 1000);\n    return () => clearInterval(interval);\n  }, []);
+    const cleanup = () => pruneExpiredVoiceCache().catch(() => {});
+    cleanup();
+    const interval = setInterval(cleanup, 24 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
   return <>
     <StatusBar style="dark" backgroundColor="#FFFFFF" />
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }} />
