@@ -47,7 +47,7 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
 }
 
 export default function Messages(){
- const params=useLocalSearchParams<{slot?:string;autoRecord?:string}>();
+ const params=useLocalSearchParams<{slot?:string;autoRecord?:string;autoToken?:string}>();
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
