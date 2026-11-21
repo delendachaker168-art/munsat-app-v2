@@ -32,3 +32,9 @@ export async function pruneExpiredVoiceCache():Promise<void>{
  }
  if(changed)await AsyncStorage.setItem(CACHE_KEY,JSON.stringify(index));
 }
+
+export async function clearLocalVoiceCache():Promise<void>{
+ const index=await readIndex();
+ for(const item of Object.values(index)){try{await FileSystem.deleteAsync(item.uri,{idempotent:true});}catch{}}
+ await AsyncStorage.removeItem(CACHE_KEY);
+}
