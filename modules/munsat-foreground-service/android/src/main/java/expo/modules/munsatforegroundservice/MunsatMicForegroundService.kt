@@ -3,6 +3,7 @@ package expo.modules.munsatforegroundservice
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -18,15 +19,25 @@ class MunsatMicForegroundService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     createNotificationChannel()
-    val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
+    val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+    val pendingIntent = launchIntent?.let {
+      PendingIntent.getActivity(
+        this,
+        0,
+        it,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+    }
+    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_btn_speak_now)
       .setContentTitle("منصت")
-      .setContentText("التعرف الصوتي نشط؛ يمكنك العودة إلى التطبيق لإيقافه.")
+      .setContentText("التعرف الصوتي نشط؛ اضغط للعودة إلى التطبيق.")
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
       .setPriority(NotificationCompat.PRIORITY_LOW)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
-      .build()
+    if (pendingIntent != null) builder.setContentIntent(pendingIntent)
+    val notification: Notification = builder.build()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(
