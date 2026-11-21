@@ -47,10 +47,9 @@ export default function VoiceCommand(){
     const now=Date.now();const delta=event.totalBytesWritten-progressRef.current.bytes;const elapsed=Math.max(.25,(now-progressRef.current.time)/1000);
     if(delta>=0){setSpeed(delta/elapsed);setEta((total-event.totalBytesWritten)/Math.max(1,delta/elapsed));}
     progressRef.current={bytes:event.totalBytesWritten,time:now};setProgress(Math.min(100,event.totalBytesWritten/total*100));
-    const current=downloadRef.current?.savable?.();if(current)AsyncStorage.setItem(RESUME_KEY,JSON.stringify(current)).catch(()=>{});
    },saved?.resumeData);
    downloadRef.current=task;
-   const result=await task.downloadAsync();
+   const result=saved?.resumeData?await task.resumeAsync():await task.downloadAsync();
    downloadRef.current=null;setDownloading(false);
    if(!result||result.status<200||result.status>=300)throw new Error('لم يكتمل تنزيل ملف النموذج.');
    await AsyncStorage.removeItem(RESUME_KEY);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
