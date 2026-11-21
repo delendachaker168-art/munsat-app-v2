@@ -102,7 +102,8 @@ export default function Messages(){
  async function cancelRecording(){
   if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=recorder.uri;
   if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-  setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;
+  if(idempotencyRef.current&&uri){const ext=uri.toLowerCase().endsWith('.3gp')?'.3gp':uri.toLowerCase().endsWith('.webm')?'.webm':'.m4a';await supabase.storage.from('voice-messages').remove([idempotencyRef.current+ext]).catch(()=>{});}
+  idempotencyRef.current=null;setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;
  }
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
   <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الرسائل الصوتية</Text><Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>اختر إحدى خانات الأصدقاء الخمس لتسجيل رسالة.</Text>
