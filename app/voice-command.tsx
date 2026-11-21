@@ -56,8 +56,8 @@ export default function VoiceCommand(){
    await AsyncStorage.removeItem(RESUME_KEY);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
    const zipInfo=await FileSystem.getInfoAsync(ZIP_PATH);if(!zipInfo.exists||(zipInfo.size||0)<1024*1024)throw new Error('ملف النموذج غير مكتمل.');
    const output=ROOT+'unpacked';await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.makeDirectoryAsync(output,{intermediates:true});
-   const subscription=subscribe(({progress:fileProgress})=>setProgress(100+Math.min(100,fileProgress*100)));
-   try{await unzip(ZIP_PATH,output);}finally{subscription.remove();}
+   const subscription=subscribe(({progress:fileProgress})=>setProgress(Math.min(100,fileProgress*100)));
+   try{await unzip(ZIP_PATH,output);setProgress(100);}finally{subscription.remove();}
    const entries=await FileSystem.readDirectoryAsync(output);const extracted=entries.find(x=>x.startsWith('vosk-model-'));
    if(!extracted)throw new Error('لم نعثر على مجلد النموذج بعد فك الضغط.');
    await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});
