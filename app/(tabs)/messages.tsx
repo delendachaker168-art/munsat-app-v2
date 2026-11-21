@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -46,11 +47,11 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
 }
 
 export default function Messages(){
- const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
+ const params=useLocalSearchParams<{slot?:string;autoRecord?:string}>();\n const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
- const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [currentUserId,setCurrentUserId]=useState('');
- const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const idempotencyRef=useRef<string|null>(null);
+ const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
+ const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const autoStartHandled=useRef(false);const idempotencyRef=useRef<string|null>(null);
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name,avatar_key)').eq('owner_id',user.id).order('slot_number');
@@ -62,7 +63,7 @@ export default function Messages(){
  },[]);
  useEffect(()=>{
   load();
-  (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});})();
+  (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});setMicReady(p.granted);})();
   return()=>{if(timer.current)clearTimeout(timer.current);};
  },[load]);
  async function sendRecording(){
@@ -93,6 +94,8 @@ export default function Messages(){
   if(timer.current)clearTimeout(timer.current);await recorder.stop();const uri=recorder.uri;
   if(uri){setPendingDuration(Math.min(120000,Date.now()-started.current));previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
  }
+ useEffect(()=>{const n=Number(params.slot);if(Number.isInteger(n)&&n>=1&&n<=5)setSelected(n);},[params.slot]);
+ useEffect(()=>{const n=Number(params.slot);if(params.autoRecord==='1'&&micReady&&slots.length>0&&!autoStartHandled.current){autoStartHandled.current=true;if(Number.isInteger(n)&&n>=1&&n<=5){const timerId=setTimeout(()=>start(n),450);return()=>clearTimeout(timerId);}}},[params.autoRecord,params.slot,micReady,slots]);
  async function cancelRecording(){
   if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=recorder.uri;
   if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
