@@ -96,7 +96,7 @@ export default function VoiceCommand(){
  }
  const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':'تنزيل النموذج العربي';
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
-  <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الأوامر الصوتية</Text>
+  <View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الأوامر الصوتية</Text><Pressable onPress={()=>router.back()}><Text style={{color:'#4F9864'}}>رجوع</Text></Pressable></View>
   <Text style={{textAlign:'right',color:'#777',lineHeight:25,marginTop:8}}>تحكم في خاناتك بصوتك. تتم معالجة الكلام محليًا على الجهاز دون إرساله إلى خادم.</Text>
   <View style={{backgroundColor:'#F3F4F3',borderRadius:16,padding:18,marginTop:22}}>
    <Text style={{textAlign:'right',fontWeight:'800',fontSize:17,color:'#222'}}>النموذج العربي المحلي</Text>
