@@ -19,6 +19,7 @@ export async function cacheVoiceMessage(messageId:string,signedUrl:string,extens
  const safeExtension=/^[a-z0-9]+$/i.test(extension)?extension:'m4a';
  const destination=directory+messageId+'.'+safeExtension;
  const result=await FileSystem.downloadAsync(signedUrl,destination);
+ if(result.status<200||result.status>=300)throw new Error('تعذر تنزيل الرسالة الصوتية.');
  index[messageId]={uri:result.uri,downloadedAt:Date.now()};
  await AsyncStorage.setItem(CACHE_KEY,JSON.stringify(index));
  return result.uri;
