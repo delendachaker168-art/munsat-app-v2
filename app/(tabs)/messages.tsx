@@ -7,7 +7,7 @@ import { supabase } from '../../src/lib/supabase';
 import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
-type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; deleted_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
+type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; downloaded_at:string|null; deleted_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
 const green='#8BC99A';
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
@@ -26,7 +26,7 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
      uri=cached;setHasLocalCopy(true);
     }else if(message.recipient_id===currentUserId){
      const cached=await getCachedVoiceUri(message.id);
-     if(cached)uri=cached;
+     if(cached){uri=cached;if(!message.downloaded_at)await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);}
      else{
       const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,3600);
       if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
