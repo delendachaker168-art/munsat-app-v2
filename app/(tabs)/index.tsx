@@ -1,7 +1,12 @@
-import { Text, View, Pressable } from 'react-native';
+import { useEffect,useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-export default function Home(){return <View style={{flex:1,backgroundColor:'#FFF',padding:24,paddingTop:70}}>
-<Text style={{fontSize:30,fontWeight:'800',color:'#111',textAlign:'right'}}>مرحبًا بك في منصت</Text>
-<Text style={{fontSize:16,color:'#777',textAlign:'right',marginTop:10,lineHeight:27}}>منصة للتواصل وتبادل الرسائل الصوتية بسهولة.</Text>
-<Pressable onPress={()=>router.push('/(tabs)/messages')} style={{marginTop:32,backgroundColor:'#8BC99A',padding:18,borderRadius:14}}><Text style={{textAlign:'center',fontWeight:'700',fontSize:17,color:'#15351D'}}>الانتقال إلى الرسائل الصوتية</Text></Pressable>
-</View>}
+import { supabase } from '../../src/lib/supabase';
+type Slot={slot_number:number;friend:{display_name:string|null}|null};
+export default function Home(){const [name,setName]=useState('');const [slots,setSlots]=useState<Slot[]>([]);const [unread,setUnread]=useState(0);
+ useEffect(()=>{(async()=>{const {data}=await supabase.auth.getUser();if(!data.user)return;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',data.user.id).maybeSingle();setName(p?.display_name||'');const {data:s}=await supabase.from('voice_slots').select('slot_number,friend:profiles!voice_slots_friend_id_fkey(display_name)').eq('owner_id',data.user.id).order('slot_number');setSlots((s||[]) as unknown as Slot[]);const {count}=await supabase.from('notifications').select('*',{count:'exact',head:true}).is('read_at',null);setUnread(count||0);})();},[]);
+ return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:24,paddingTop:68,paddingBottom:40}}><Text style={{fontSize:15,color:'#777',textAlign:'right'}}>أهلًا بك</Text><Text style={{fontSize:31,fontWeight:'800',color:'#111',textAlign:'right',marginTop:5}}>{name||'في منصت'}</Text><Text style={{fontSize:15,color:'#777',textAlign:'right',marginTop:8,lineHeight:25}}>تواصل مع أصدقائك برسائل صوتية قصيرة.</Text>
+ <Pressable onPress={()=>router.push('/(tabs)/messages')} style={{backgroundColor:'#8BC99A',padding:22,borderRadius:18,marginTop:28}}><Text style={{fontSize:21,fontWeight:'800',textAlign:'right',color:'#17351E'}}>ابدأ رسالة صوتية</Text><Text style={{textAlign:'right',color:'#34543B',marginTop:6}}>تسجيل حتى دقيقتين ثم الإرسال التلقائي</Text></Pressable>
+ <View style={{flexDirection:'row-reverse',gap:10,marginTop:16}}><Pressable onPress={()=>router.push('/(tabs)/friends')} style={{flex:1,backgroundColor:'#F1F2F1',padding:17,borderRadius:14}}><Text style={{textAlign:'right',fontWeight:'700',color:'#222'}}>إدارة الأصدقاء</Text><Text style={{textAlign:'right',color:'#777',marginTop:5,fontSize:12}}>بحث وطلبات وخانات</Text></Pressable><View style={{flex:1,backgroundColor:'#F1F2F1',padding:17,borderRadius:14}}><Text style={{textAlign:'right',fontWeight:'700',color:'#222'}}>الإشعارات</Text><Text style={{textAlign:'right',color:'#777',marginTop:5,fontSize:12}}>{unread} غير مقروء</Text></View></View>
+ <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',color:'#111',marginTop:30,marginBottom:10}}>خانات أصدقائك</Text>{[1,2,3,4,5].map(n=><View key={n} style={{backgroundColor:'#F4F5F4',padding:15,borderRadius:12,marginBottom:8,flexDirection:'row-reverse',justifyContent:'space-between'}}><Text style={{fontWeight:'700',color:'#333'}}>الخانة {n}</Text><Text style={{color:'#777'}}>{slots.find(s=>s.slot_number===n)?.friend?.display_name||'لم يُخصص صديق'}</Text></View>)}
+ </ScrollView>}
