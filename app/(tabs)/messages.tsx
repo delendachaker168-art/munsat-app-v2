@@ -44,7 +44,7 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
 }
 
 export default function Messages(){
- const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true, directory:'document'});
+ const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);
@@ -82,7 +82,7 @@ export default function Messages(){
  }
  async function start(){
   const target=slots.find(s=>s.slot_number===selected);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record();timer.current=setTimeout(async()=>{await recorder.stop();await sendRecording();},120000);}
+  try{await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();await sendRecording();},120000);}
   catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
  }
  async function stop(){if(timer.current)clearTimeout(timer.current);await recorder.stop();await sendRecording();}
