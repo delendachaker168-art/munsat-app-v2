@@ -47,11 +47,12 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
 }
 
 export default function Messages(){
- const params=useLocalSearchParams<{slot?:string;autoRecord?:string}>();\n const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
+ const params=useLocalSearchParams<{slot?:string;autoRecord?:string}>();
+ const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
- const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const autoStartHandled=useRef(false);const idempotencyRef=useRef<string|null>(null);
+ const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name,avatar_key)').eq('owner_id',user.id).order('slot_number');
@@ -75,31 +76,33 @@ export default function Messages(){
    const response=await fetch(uri);const body=await response.arrayBuffer();
    const extension=uri.toLowerCase().endsWith('.3gp')?'.3gp':uri.toLowerCase().endsWith('.webm')?'.webm':'.m4a';
    const contentType=extension==='.3gp'?'audio/3gpp':extension==='.webm'?'audio/webm':'audio/mp4';
-   const key=user.id+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+extension;
-   const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:false});if(uploadError)throw uploadError;
-   const duration=Math.min(120000,Math.max(1000,pendingDuration||Date.now()-started.current));
-   const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:target.friend_id,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:key});
-   if(insertError){await supabase.storage.from('voice-messages').remove([key]);throw insertError;}
+   const idempotencyKey=idempotencyRef.current||user.id+'/voice-'+Date.now()+'-'+Math.random().toString(36).slice(2);idempotencyRef.current=idempotencyKey;
+   const key=idempotencyKey+extension;
+   const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:true});if(uploadError)throw uploadError;
+   const duration=Math.min(120000,Math.max(1000,pendingDurationRef.current||Date.now()-started.current));
+   const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:target.friend_id,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey});
+   if(insertError){const {data:existing}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(!existing)throw insertError;}
+   idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-   setPendingRecording(false);setPendingDuration(0);previewPlayer.pause();Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
+   setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
   }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
   finally{setBusy(false);}
  }
- async function start(){
-  const target=slots.find(s=>s.slot_number===selected);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{setPendingRecording(false);setPendingDuration(0);idempotencyRef.current=null;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();setPendingDuration(120000);await sendRecording();},120000);}
+ async function start(slot=selected){
+  setSelected(slot);const target=slots.find(s=>s.slot_number===slot);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
+  try{setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();pendingDurationRef.current=120000;setPendingDuration(120000);await sendRecording();},120000);}
   catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
  }
  async function stop(){
   if(timer.current)clearTimeout(timer.current);await recorder.stop();const uri=recorder.uri;
-  if(uri){setPendingDuration(Math.min(120000,Date.now()-started.current));previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
+  if(uri){const duration=Math.min(120000,Date.now()-started.current);pendingDurationRef.current=duration;setPendingDuration(duration);previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
  }
  useEffect(()=>{const n=Number(params.slot);if(Number.isInteger(n)&&n>=1&&n<=5)setSelected(n);},[params.slot]);
- useEffect(()=>{const n=Number(params.slot);if(params.autoRecord==='1'&&micReady&&slots.length>0&&!autoStartHandled.current){autoStartHandled.current=true;if(Number.isInteger(n)&&n>=1&&n<=5){const timerId=setTimeout(()=>start(n),450);return()=>clearTimeout(timerId);}}},[params.autoRecord,params.slot,micReady,slots]);
+ useEffect(()=>{const n=Number(params.slot);const token=params.autoToken;if(params.autoRecord==='1'&&token&&micReady&&slots.length>0&&handledAutoToken.current!==token){handledAutoToken.current=token;if(Number.isInteger(n)&&n>=1&&n<=5){const timerId=setTimeout(()=>start(n),450);return()=>clearTimeout(timerId);}}},[params.autoRecord,params.autoToken,params.slot,micReady,slots]);
  async function cancelRecording(){
   if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=recorder.uri;
   if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-  setPendingRecording(false);
+  setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;
  }
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
   <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الرسائل الصوتية</Text><Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>اختر إحدى خانات الأصدقاء الخمس لتسجيل رسالة.</Text>
