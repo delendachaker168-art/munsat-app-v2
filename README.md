@@ -23,6 +23,7 @@
 - تشغيل التطوير: `npx expo start`
 
 ## إعدادات البناء
+- مكتبات Vosk وفك الضغط والخدمة الأمامية إضافات أصلية؛ يلزم بناء EAS جديد لتضمينها، ولا يعمل التعرف الصوتي داخل Expo Go.
 - ملف `eas.json` يحتوي ملفي preview وproduction.
 - ملف `app.json` يحدد معرّف Android: `com.delendasmartsolutions.munsat`، وأيقونة التطبيق في `assets/icon.png`.
 - تم ربط المستودع بمشروع Expo الحالي عبر `owner` و`extra.eas.projectId`، دون بدء أي بناء تلقائي.
