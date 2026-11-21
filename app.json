@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "منصت",
+    "slug": "munsat",
+    "scheme": "munsat",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": ["expo-router", "expo-audio"],
+    "experiments": { "typedRoutes": true },
+    "android": { "package": "com.delendasmartsolutions.munsat", "versionCode": 1 },
+    "ios": { "bundleIdentifier": "com.delendasmartsolutions.munsat" }
+  }
+}
