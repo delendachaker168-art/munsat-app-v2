@@ -1,11 +1,12 @@
 import { useEffect,useRef,useState } from 'react';
-import { Alert, AppState, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, AppState, PermissionsAndroid, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
 import Vosk from 'react-native-vosk';
 import { subscribe,unzip } from 'react-native-zip-archive';
 import { AudioModule } from 'expo-audio';
+import MunsatForegroundService from '../modules/munsat-foreground-service/src';
 
 const MODEL_URL='https://alphacephei.com/vosk/models/vosk-model-small-ar-tn-0.1-linto.zip';
 const MODEL_NAME='model-ar-tn';
@@ -28,7 +29,7 @@ export default function VoiceCommand(){
  const [progress,setProgress]=useState(0);const [speed,setSpeed]=useState(0);const [eta,setEta]=useState(0);const [partial,setPartial]=useState('');const [recognized,setRecognized]=useState('');const [pendingSlot,setPendingSlot]=useState<number|null>(null);const [status,setStatus]=useState('النموذج العربي غير مثبت بعد.');
  const downloadRef=useRef<any>(null);const pauseRequestedRef=useRef(false);const voskRef=useRef<any>(null);const modelLoadedRef=useRef(false);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
 
- useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
+ useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();MunsatForegroundService.stop();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
  useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload(true).catch(()=>{});}});return()=>sub.remove();},[]);
 
  async function pauseDownload(silent=false){
@@ -74,6 +75,8 @@ export default function VoiceCommand(){
   if(!modelReady){Alert.alert('النموذج غير مثبت','نزّل النموذج العربي أولًا.');return;}
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف المحلي متاح حاليًا على Android.');return;}
   const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}
+  let foregroundEnabled=true;
+  if(Platform.Version>=33){const notificationPermission=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);foregroundEnabled=notificationPermission===PermissionsAndroid.RESULTS.GRANTED;}
   setLoadingModel(true);setStatus('جارٍ تحميل النموذج في الذاكرة…');
   try{
    if(!voskRef.current)voskRef.current=new Vosk();
@@ -81,15 +84,15 @@ export default function VoiceCommand(){
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
    listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
    listenersRef.current.push(voskRef.current.onResult((value:any)=>{
-    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();setListening(false);
+    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();MunsatForegroundService.stop();setListening(false);
     const slot=parseSlot(text);if(slot)setPendingSlot(slot);else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
    }));
-   listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
-   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus('أستمع الآن. قل: محادثة واحد إلى خمسة.'); 
-  }catch(e:any){setListening(false);setStatus('تعذر تحميل النموذج.');Alert.alert('تعذر تشغيل النموذج',e?.message||'أعد المحاولة.');}
+   listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');MunsatForegroundService.stop();setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
+   if(foregroundEnabled)MunsatForegroundService.start();\n   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن في الخلفية أيضًا؛ قل: محادثة واحد إلى خمسة.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
+  }catch(e:any){MunsatForegroundService.stop();setListening(false);setStatus('تعذر تحميل النموذج.');Alert.alert('تعذر تشغيل النموذج',e?.message||'أعد المحاولة.');}
   finally{setLoadingModel(false);}
  }
- function stopListening(){try{voskRef.current?.stop();}catch{}setListening(false);setStatus('توقف الاستماع.');}
+ function stopListening(){try{voskRef.current?.stop();MunsatForegroundService.stop();}catch{}setListening(false);setStatus('توقف الاستماع.');}
  async function confirmCommand(){
   if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}setPendingSlot(null);
   router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});
