@@ -91,7 +91,7 @@ export default function VoiceCommand(){
  function stopListening(){try{voskRef.current?.stop();}catch{}setListening(false);setStatus('توقف الاستماع.');}
  async function confirmCommand(){
   if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}setPendingSlot(null);
-  router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1'}});
+  router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});
  }
  const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':'تنزيل النموذج العربي';
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
