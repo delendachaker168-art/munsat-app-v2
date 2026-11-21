@@ -76,7 +76,7 @@ export default function VoiceCommand(){
   setLoadingModel(true);setStatus('جارٍ تحميل النموذج في الذاكرة…');
   try{
    if(!voskRef.current)voskRef.current=new Vosk();
-   if(!modelLoadedRef.current){await voskRef.current.loadModel(MODEL_PATH);modelLoadedRef.current=true;}
+   if(!modelLoadedRef.current){const nativeModelPath=MODEL_PATH.startsWith('file://')?MODEL_PATH.replace('file://',''):MODEL_PATH;await voskRef.current.loadModel(nativeModelPath);modelLoadedRef.current=true;}
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
    listenersRef.current.push(voskRef.current.onPartialResult((text:string)=>setPartial(text)));
    listenersRef.current.push(voskRef.current.onResult((text:string)=>{
