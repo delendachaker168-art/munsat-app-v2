@@ -35,7 +35,7 @@ export default function VoiceCommand(){
  async function pauseDownload(silent=false){
   const task=downloadRef.current;if(!task)return;
   try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved)await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));}catch{}
-  downloadRef.current=null;setDownloading(false);if(!silent)setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
+  downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
  }
  async function downloadModel(){
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي المحلي مضبوط حاليًا لأجهزة Android.');return;}
