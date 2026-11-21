@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { requireNativeModule } from 'expo';
+import { requireNativeModule } from 'expo-modules-core';
 
 type ForegroundService = {
   start(): boolean;
