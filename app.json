@@ -20,7 +20,14 @@
         {
           "photosPermission": "السماح لمنصت باختيار صورة الملف الشخصي."
         }
-      ]
+      ],
+      [
+        "react-native-vosk",
+        {
+          "iOSMicrophonePermission": "يحتاج منصت إلى الميكروفون للتعرف على الأوامر الصوتية محليًا."
+        }
+      ],
+      "react-native-zip-archive"
     ],
     "experiments": {
       "typedRoutes": true
