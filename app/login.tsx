@@ -15,14 +15,23 @@ export default function Login() {
     setBusy(true); const {error}=await supabase.auth.signUp({email:email.trim(),password,options:{data:{full_name:displayName.trim()}}}); setBusy(false);
     if(error) Alert.alert('تعذر التسجيل',error.message); else Alert.alert('تم إنشاء الحساب','تحقق من بريدك الإلكتروني لتأكيد الحساب.');
   }
+  async function forgotPassword(){
+    if(!email.trim()){Alert.alert('استعادة كلمة المرور','أدخل بريدك الإلكتروني أولًا.');return;}
+    setBusy(true);
+    const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:'munsat://reset-password'});
+    setBusy(false);
+    if(error) Alert.alert('تعذر إرسال الرابط',error.message);
+    else Alert.alert('تحقق من بريدك','أرسلنا رابطًا لاستعادة كلمة المرور. افتحه على هذا الجهاز لإكمال العملية.');
+  }
   return <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{flex:1,justifyContent:'center',padding:26,backgroundColor:'#FFF'}}>
     <Text style={{fontSize:36,fontWeight:'800',textAlign:'center',color:'#111',marginBottom:8}}>منصت</Text>
     <Text style={{fontSize:16,textAlign:'center',color:'#777',marginBottom:28}}>تواصل صوتي بسيط وآمن</Text>
     <TextInput value={displayName} onChangeText={setDisplayName} placeholder="اسمك الظاهر (للحساب الجديد)" style={input}/>
-    <TextInput value={email} onChangeText={setEmail} placeholder="البريد الإلكتروني" keyboardType="email-address" autoCapitalize="none" style={input}/>
+    <TextInput value={email} onChangeText={setEmail} placeholder="البريد الإلكتروني" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={input}/>
     <TextInput value={password} onChangeText={setPassword} placeholder="كلمة المرور" secureTextEntry style={input}/>
     <Pressable disabled={busy} onPress={signIn} style={button}><Text style={buttonText}>{busy?'يرجى الانتظار…':'تسجيل الدخول'}</Text></Pressable>
-    <Pressable disabled={busy} onPress={signUp} style={{padding:16}}><Text style={{textAlign:'center',color:'#333'}}>إنشاء حساب جديد</Text></Pressable>
+    <Pressable disabled={busy} onPress={forgotPassword} style={{padding:12}}><Text style={{textAlign:'center',color:'#4F9864'}}>نسيت كلمة المرور؟</Text></Pressable>
+    <Pressable disabled={busy} onPress={signUp} style={{padding:12}}><Text style={{textAlign:'center',color:'#333'}}>إنشاء حساب جديد</Text></Pressable>
   </KeyboardAvoidingView>;
 }
 const input={backgroundColor:'#F3F4F3',padding:16,borderRadius:12,marginBottom:14,textAlign:'right' as const,fontSize:16};
