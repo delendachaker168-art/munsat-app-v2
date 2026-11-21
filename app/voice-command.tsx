@@ -18,6 +18,7 @@ const GREEN='#8BC99A';
 const GRAMMAR=['محادثة واحد','محادثة 1','محادثة الأولى','محادثة الاولى','محادثة اثنين','محادثة اثنان','محادثة 2','محادثة الثانية','محادثة اثنين','محادثة ثلاثة','محادثة ثلاثه','محادثة 3','محادثة الثالثة','محادثة أربعة','محادثة اربعة','محادثة 4','محادثة الرابعة','محادثة خمسة','محادثة 5','محادثة الخامسة','[unk]'];
 
 function normalize(text:string){return text.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
+function resultText(value:any):string{if(typeof value==='string')return value;if(value&&typeof value.text==='string')return value.text;if(value&&typeof value.result==='string')return value.result;return '';}
 function parseSlot(value:string):number|null{const t=normalize(value);const patterns:[number,RegExp][]=[[1,/(محادثه|محادثة) (واحد|1|الاولى)/],[2,/(محادثه|محادثة) (اثنين|اثنان|2|الثانيه)/],[3,/(محادثه|محادثة) (ثلاثه|ثلاثة|3|الثالثه)/],[4,/(محادثه|محادثة) (اربعه|أربعة|4|الرابعه)/],[5,/(محادثه|محادثة) (خمسه|خمسة|5|الخامسه)/]];for(const [n,re] of patterns)if(re.test(t))return n;return null;}
 function formatBytes(n:number){if(n<1024*1024)return Math.round(n/1024)+' KB';return (n/1024/1024).toFixed(1)+' MB';}
 function formatTime(seconds:number){if(!Number.isFinite(seconds)||seconds<0)return '—';const m=Math.floor(seconds/60);const s=Math.floor(seconds%60);return m?m+' د '+s+' ث':s+' ث';}
@@ -78,9 +79,9 @@ export default function VoiceCommand(){
    if(!voskRef.current)voskRef.current=new Vosk();
    if(!modelLoadedRef.current){const nativeModelPath=MODEL_PATH.startsWith('file://')?MODEL_PATH.replace('file://',''):MODEL_PATH;await voskRef.current.loadModel(nativeModelPath);modelLoadedRef.current=true;}
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
-   listenersRef.current.push(voskRef.current.onPartialResult((text:string)=>setPartial(text)));
-   listenersRef.current.push(voskRef.current.onResult((text:string)=>{
-    if(handledRef.current)return;handledRef.current=true;setRecognized(text);setPartial('');voskRef.current?.stop();setListening(false);
+   listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
+   listenersRef.current.push(voskRef.current.onResult((value:any)=>{
+    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();setListening(false);
     const slot=parseSlot(text);if(slot)setPendingSlot(slot);else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
    }));
    listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
