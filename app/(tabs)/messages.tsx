@@ -50,7 +50,7 @@ export default function Messages(){
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [currentUserId,setCurrentUserId]=useState('');
- const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);
+ const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const idempotencyRef=useRef<string|null>(null);
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name)').eq('owner_id',user.id).order('slot_number');
@@ -86,7 +86,7 @@ export default function Messages(){
  }
  async function start(){
   const target=slots.find(s=>s.slot_number===selected);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{setPendingRecording(false);setPendingDuration(0);await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();setPendingDuration(120000);await sendRecording();},120000);}
+  try{setPendingRecording(false);setPendingDuration(0);idempotencyRef.current=null;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();setPendingDuration(120000);await sendRecording();},120000);}
   catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
  }
  async function stop(){
