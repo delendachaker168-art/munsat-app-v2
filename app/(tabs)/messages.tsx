@@ -12,28 +12,33 @@ const green='#8BC99A';
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
 function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void}){
- const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);
+ const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);const [loadedMessageId,setLoadedMessageId]=useState<string|null>(null);
  async function play(){
   if(status.playing){player.pause();return;}
   setLoading(true);
   try{
-   if(message.recipient_id===currentUserId){
-    let localUri=await getCachedVoiceUri(message.id);
-    if(!localUri){
+   if(loadedMessageId!==message.id){
+    let uri:string;
+    if(message.recipient_id===currentUserId){
+     const cached=await getCachedVoiceUri(message.id);
+     if(cached)uri=cached;
+     else{
+      const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,600);
+      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
+      uri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
+      await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
+     }
+    }else{
      const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,600);
      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
-     localUri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
-     await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
+     uri=data.signedUrl;
     }
-    player.replace(localUri);
-    await supabase.from('voice_messages').update({listened_at:new Date().toISOString()}).eq('id',message.id);
+    player.replace(uri);setLoadedMessageId(message.id);player.play();
+    if(message.recipient_id===currentUserId){const at=new Date().toISOString();await supabase.from('voice_messages').update({listened_at:at}).eq('id',message.id);onListened(message.id,at);}
    }else{
-    const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,600);
-    if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
-    player.replace(data.signedUrl);
+    if(status.duration>0&&status.currentTime>=status.duration)player.seekTo(0);
+    player.play();
    }
-   if(status.duration>0&&status.currentTime>=status.duration)player.seekTo(0);
-   player.play();
   }catch(e:any){Alert.alert('تعذر تشغيل الرسالة',e?.message||'حاول مرة أخرى.');}
   finally{setLoading(false);}
  }
