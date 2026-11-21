@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams,useFocusEffect } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -62,8 +62,8 @@ export default function Messages(){
   const {data:msg}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).limit(20);
   setMessages((msg||[]) as Message[]);
  },[]);
+ useFocusEffect(useCallback(()=>{load();},[load]));
  useEffect(()=>{
-  load();
   (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});setMicReady(p.granted);})();
   return()=>{if(timer.current)clearTimeout(timer.current);};
  },[load]);
