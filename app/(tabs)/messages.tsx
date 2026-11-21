@@ -62,7 +62,7 @@ export default function Messages(){
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
- const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
+ const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
@@ -78,6 +78,20 @@ export default function Messages(){
   (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});setMicReady(p.granted);})();
   return()=>{if(timer.current)clearTimeout(timer.current);};
  },[load]);
+ async function loadMoreMessages(){
+  if(loadingMore||!hasMoreMessages)return;
+  setLoadingMore(true);
+  try{
+   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;
+   const from=messageOffset;
+   const {data,error}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+19);
+   if(error)throw error;
+   const page=(data||[]) as Message[];
+   setMessages(current=>{const seen=new Set(current.map(item=>item.id));return [...current,...page.filter(item=>!seen.has(item.id))];});
+   setMessageOffset(from+page.length);setHasMoreMessages(page.length===20);
+  }catch(e:any){Alert.alert('تعذر تحميل الرسائل السابقة',e?.message||'حاول مرة أخرى.');}
+  finally{setLoadingMore(false);}
+ }
  async function sendRecording(){
   if(busy)return;setBusy(true);const uri=recorder.uri;
   try{
@@ -128,6 +142,6 @@ export default function Messages(){
    </View>:<><Pressable disabled={busy} onPress={state.isRecording?stop:start} style={{width:78,height:78,borderRadius:39,backgroundColor:state.isRecording?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{state.isRecording?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':state.isRecording?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
   </View>
   <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginTop:30,marginBottom:12,color:'#111'}}>أحدث الرسائل</Text>
-  {messages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>لا توجد رسائل بعد.</Text>:messages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}
+  {messages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>لا توجد رسائل بعد.</Text>:messages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}{hasMoreMessages?<Pressable disabled={loadingMore} onPress={loadMoreMessages} style={{backgroundColor:'#F1F2F1',padding:14,borderRadius:11,marginTop:5,marginBottom:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#444'}}>{loadingMore?'جارٍ تحميل الرسائل…':'تحميل رسائل أقدم'}</Text></Pressable>:null}
  </ScrollView>;
 }
