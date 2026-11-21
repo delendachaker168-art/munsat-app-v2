@@ -21,8 +21,8 @@
 
 ## إعدادات البناء
 - ملف `eas.json` يحتوي ملفي preview وproduction.
-- ملف `app.json` يحدد معرّف Android: `com.delendasmartsolutions.munsat`.
-- ربط EAS Project ID يجب أن يكون في `extra.eas.projectId` قبل إطلاق بناء EAS.
+- ملف `app.json` يحدد معرّف Android: `com.delendasmartsolutions.munsat`، وأيقونة التطبيق في `assets/icon.png`.
+- تم ربط المستودع بمشروع Expo الحالي عبر `owner` و`extra.eas.projectId`، دون بدء أي بناء تلقائي.
 
 ## Supabase
 العميل يستخدم عنوان المشروع ومفتاح Publishable المخصص للتطبيق. لا تضع أبدًا مفتاح `service_role` أو أي سر خادمي في التطبيق.
