@@ -9,10 +9,28 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      ["expo-audio", { "microphonePermission": "السماح لمنصت باستخدام الميكروفون لتسجيل الرسائل الصوتية." }]
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "السماح لمنصت باستخدام الميكروفون لتسجيل الرسائل الصوتية."
+        }
+      ]
     ],
-    "experiments": { "typedRoutes": true },
-    "android": { "package": "com.delendasmartsolutions.munsat", "versionCode": 1 },
-    "ios": { "bundleIdentifier": "com.delendasmartsolutions.munsat" }
+    "experiments": {
+      "typedRoutes": true
+    },
+    "android": {
+      "package": "com.delendasmartsolutions.munsat",
+      "versionCode": 1
+    },
+    "ios": {
+      "bundleIdentifier": "com.delendasmartsolutions.munsat"
+    },
+    "owner": "delendachaker168",
+    "extra": {
+      "eas": {
+        "projectId": "72bcefd6-703f-4deb-a741-b6ef639cf4a4"
+      }
+    }
   }
 }
