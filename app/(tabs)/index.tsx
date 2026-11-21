@@ -1,10 +1,11 @@
-import { useEffect,useState } from 'react';
+import { useCallback,useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router,useFocusEffect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 type Slot={slot_number:number;friend:{display_name:string|null}|null};
 export default function Home(){const [name,setName]=useState('');const [slots,setSlots]=useState<Slot[]>([]);const [unread,setUnread]=useState(0);
- useEffect(()=>{(async()=>{const {data}=await supabase.auth.getUser();if(!data.user)return;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',data.user.id).maybeSingle();setName(p?.display_name||'');const {data:s}=await supabase.from('voice_slots').select('slot_number,friend:profiles!voice_slots_friend_id_fkey(display_name)').eq('owner_id',data.user.id).order('slot_number');setSlots((s||[]) as unknown as Slot[]);const {count}=await supabase.from('notifications').select('*',{count:'exact',head:true}).is('read_at',null);setUnread(count||0);})();},[]);
+ const load=useCallback(async()=>{const {data}=await supabase.auth.getUser();if(!data.user)return;const {data:p}=await supabase.from('profiles').select('display_name').eq('id',data.user.id).maybeSingle();setName(p?.display_name||'');const {data:s}=await supabase.from('voice_slots').select('slot_number,friend:profiles!voice_slots_friend_id_fkey(display_name)').eq('owner_id',data.user.id).order('slot_number');setSlots((s||[]) as unknown as Slot[]);const {count}=await supabase.from('notifications').select('*',{count:'exact',head:true}).is('read_at',null);setUnread(count||0);},[]);
+ useFocusEffect(useCallback(()=>{load();},[load]));
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:24,paddingTop:68,paddingBottom:40}}><Text style={{fontSize:15,color:'#777',textAlign:'right'}}>أهلًا بك</Text><Text style={{fontSize:31,fontWeight:'800',color:'#111',textAlign:'right',marginTop:5}}>{name||'في منصت'}</Text><Text style={{fontSize:15,color:'#777',textAlign:'right',marginTop:8,lineHeight:25}}>تواصل مع أصدقائك برسائل صوتية قصيرة.</Text>
  <Pressable onPress={()=>router.push('/(tabs)/messages')} style={{backgroundColor:'#8BC99A',padding:22,borderRadius:18,marginTop:28}}><Text style={{fontSize:21,fontWeight:'800',textAlign:'right',color:'#17351E'}}>ابدأ رسالة صوتية</Text><Text style={{textAlign:'right',color:'#34543B',marginTop:6}}>تسجيل حتى دقيقتين ثم الإرسال التلقائي</Text></Pressable>
  <Pressable onPress={()=>router.push('/voice-command')} style={{backgroundColor:'#EAF5EC',padding:17,borderRadius:14,marginTop:12}}><Text style={{textAlign:'right',fontWeight:'800',color:'#356B43'}}>التحكم الصوتي</Text><Text style={{textAlign:'right',color:'#66806C',marginTop:5,fontSize:12}}>قل «محادثة واحد» إلى «محادثة خمسة»</Text></Pressable>
