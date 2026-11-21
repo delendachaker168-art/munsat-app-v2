@@ -11,7 +11,7 @@ type Message = { id:string; sender_id:string; recipient_id:string; slot_number:n
 const green='#8BC99A';
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
-function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId:string}){
+function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void}){
  const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);
  async function play(){
   if(status.playing){player.pause();return;}
@@ -117,6 +117,6 @@ export default function Messages(){
    </View>:<><Pressable disabled={busy} onPress={state.isRecording?stop:start} style={{width:78,height:78,borderRadius:39,backgroundColor:state.isRecording?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{state.isRecording?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':state.isRecording?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
   </View>
   <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginTop:30,marginBottom:12,color:'#111'}}>أحدث الرسائل</Text>
-  {messages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>لا توجد رسائل بعد.</Text>:messages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId}/>)}
+  {messages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>لا توجد رسائل بعد.</Text>:messages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}
  </ScrollView>;
 }
