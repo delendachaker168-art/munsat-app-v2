@@ -88,7 +88,8 @@ export default function VoiceCommand(){
     const slot=parseSlot(text);if(slot)setPendingSlot(slot);else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
    }));
    listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');MunsatForegroundService.stop();setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
-   if(foregroundEnabled)MunsatForegroundService.start();\n   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن في الخلفية أيضًا؛ قل: محادثة واحد إلى خمسة.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
+   if(foregroundEnabled)MunsatForegroundService.start();
+   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن في الخلفية أيضًا؛ قل: محادثة واحد إلى خمسة.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
   }catch(e:any){MunsatForegroundService.stop();setListening(false);setStatus('تعذر تحميل النموذج.');Alert.alert('تعذر تشغيل النموذج',e?.message||'أعد المحاولة.');}
   finally{setLoadingModel(false);}
  }
