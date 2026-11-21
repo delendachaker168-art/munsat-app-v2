@@ -6,7 +6,6 @@ import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, use
 import { supabase } from '../../src/lib/supabase';
 import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 import Vosk from 'react-native-vosk';
-import * as FileSystem from 'expo-file-system/legacy';
 import MunsatForegroundService from '../../modules/munsat-foreground-service/src';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
@@ -82,6 +81,8 @@ export default function Messages(){
   setMessages((msg||[]) as Message[]);setMessageOffset(20);setHasMoreMessages((msg||[]).length===20);
  },[]);
  useFocusEffect(useCallback(()=>{load();},[load]));
+ useEffect(()=>{(async()=>{try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(permission.granted){await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);}}catch{setMicReady(false);}})();},[]);
+
  useEffect(()=>()=>{try{closeListenersRef.current.forEach(x=>x?.remove?.());closeListenersRef.current=[];closeVoskRef.current?.stop();closeVoskRef.current?.unload();MunsatForegroundService.stop();}catch{}},[]);
  function stopCloseCommandListener(){
   closeListenersRef.current.forEach(x=>x?.remove?.());closeListenersRef.current=[];
@@ -165,7 +166,7 @@ export default function Messages(){
  }
  async function start(slot=selected){
   setSelected(slot);const target=slots.find(s=>s.slot_number===slot);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;closeHandledRef.current=false;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});void startCloseCommandListener();timer.current=setTimeout(async()=>{stopCloseCommandListener();await recorder.stop();pendingDurationRef.current=120000;setPendingDuration(120000);await sendRecording();},120000);}
+  try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;closeHandledRef.current=false;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});void startCloseCommandListener();timer.current=setTimeout(async()=>{stopCloseCommandListener();await recorder.stop();pendingDurationRef.current=120000;setPendingDuration(120000);await sendRecording();},120000);}
   catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
  }
  async function stop(){
