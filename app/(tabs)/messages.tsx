@@ -49,7 +49,7 @@ export default function Messages(){
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
- const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
+ const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [currentUserId,setCurrentUserId]=useState('');
  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
@@ -76,22 +76,22 @@ export default function Messages(){
    const contentType=extension==='.3gp'?'audio/3gpp':extension==='.webm'?'audio/webm':'audio/mp4';
    const key=user.id+'/'+Date.now()+'-'+Math.random().toString(36).slice(2)+extension;
    const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:false});if(uploadError)throw uploadError;
-   const duration=Math.min(120000,Math.max(1000,Date.now()-started.current));
+   const duration=Math.min(120000,Math.max(1000,pendingDuration||Date.now()-started.current));
    const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:target.friend_id,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:key});
    if(insertError){await supabase.storage.from('voice-messages').remove([key]);throw insertError;}
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-   setPendingRecording(false);previewPlayer.pause();Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
-  }catch(e:any){setPendingRecording(Boolean(uri));Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
+   setPendingRecording(false);setPendingDuration(0);previewPlayer.pause();Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
+  }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
   finally{setBusy(false);}
  }
  async function start(){
   const target=slots.find(s=>s.slot_number===selected);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{setPendingRecording(false);await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();await sendRecording();},120000);}
+  try{setPendingRecording(false);setPendingDuration(0);await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});timer.current=setTimeout(async()=>{await recorder.stop();setPendingDuration(120000);await sendRecording();},120000);}
   catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
  }
  async function stop(){
   if(timer.current)clearTimeout(timer.current);await recorder.stop();const uri=recorder.uri;
-  if(uri){previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
+  if(uri){setPendingDuration(Math.min(120000,Date.now()-started.current));previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
  }
  async function cancelRecording(){
   if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=recorder.uri;
@@ -101,7 +101,7 @@ export default function Messages(){
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
   <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الرسائل الصوتية</Text><Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>اختر إحدى خانات الأصدقاء الخمس لتسجيل رسالة.</Text>
   <View style={{flexDirection:'row-reverse',gap:8,marginBottom:22}}>{[1,2,3,4,5].map(n=>{const s=slots.find(x=>x.slot_number===n);return <Pressable key={n} disabled={state.isRecording||pendingRecording} onPress={()=>setSelected(n)} style={{flex:1,paddingVertical:13,borderRadius:12,alignItems:'center',backgroundColor:selected===n?green:'#F1F2F1',borderWidth:selected===n?1:0,borderColor:'#6EAD7D'}}><Text style={{fontWeight:'800',color:'#17251A'}}>{n}</Text><Text numberOfLines={1} style={{fontSize:9,color:'#555',marginTop:4}}>{s?.friend?.display_name||'فارغة'}</Text></Pressable>})}</View>
-  <View style={{backgroundColor:'#F4F5F4',borderRadius:20,padding:24,alignItems:'center'}}><Text style={{fontSize:16,color:'#555'}}>{pendingRecording?'مراجعة التسجيل':'مدة التسجيل'}</Text><Text style={{fontSize:42,fontWeight:'800',color:'#111',marginVertical:14}}>{fmt(pendingRecording?(started.current?Date.now()-started.current:0):(state.durationMillis||0))}</Text>
+  <View style={{backgroundColor:'#F4F5F4',borderRadius:20,padding:24,alignItems:'center'}}><Text style={{fontSize:16,color:'#555'}}>{pendingRecording?'مراجعة التسجيل':'مدة التسجيل'}</Text><Text style={{fontSize:42,fontWeight:'800',color:'#111',marginVertical:14}}>{fmt(pendingRecording?pendingDuration:(state.durationMillis||0))}</Text>
    <Text style={{color:'#777',fontSize:12,marginBottom:20}}>{pendingRecording?'استمع إلى التسجيل قبل إرساله أو ألغِه':'الحد الأقصى دقيقتان، ثم يرسل التسجيل تلقائيًا'}</Text>
    {pendingRecording?<View style={{width:'100%',gap:10}}>
     <Pressable onPress={()=>{if(previewStatus.playing)previewPlayer.pause();else{if(previewStatus.duration>0&&previewStatus.currentTime>=previewStatus.duration)previewPlayer.seekTo(0);previewPlayer.play();}}} style={{backgroundColor:'#E7E9E7',padding:14,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#222'}}>{previewStatus.playing?'إيقاف الاستماع':'استماع إلى التسجيل'}</Text></Pressable>
