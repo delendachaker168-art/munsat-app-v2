@@ -3,6 +3,7 @@ import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'reac
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../../src/lib/supabase';
+import { clearLocalVoiceCache } from '../../src/lib/local-audio';
 export default function Profile(){
  const [email,setEmail]=useState('');const [displayName,setDisplayName]=useState('');const [bio,setBio]=useState('');const [avatarKey,setAvatarKey]=useState<string|null>(null);const [avatarUrl,setAvatarUrl]=useState<string|null>(null);const [busy,setBusy]=useState(false);const [photoBusy,setPhotoBusy]=useState(false);
  useEffect(()=>{(async()=>{const {data}=await supabase.auth.getUser();if(data.user){setEmail(data.user.email||'');const {data:p}=await supabase.from('profiles').select('display_name,bio,avatar_key').eq('id',data.user.id).maybeSingle();setDisplayName(p?.display_name||'');setBio(p?.bio||'');if(p?.avatar_key){setAvatarKey(p.avatar_key);setAvatarUrl(supabase.storage.from('avatars').getPublicUrl(p.avatar_key).data.publicUrl);}}})();},[]);
@@ -27,7 +28,7 @@ export default function Profile(){
  }
  async function deletePhoto(){if(!avatarKey)return;const {data}=await supabase.auth.getUser();if(!data.user)return;setPhotoBusy(true);const old=avatarKey;const {error}=await supabase.from('profiles').update({avatar_key:null,updated_at:new Date().toISOString()}).eq('id',data.user.id);if(error)Alert.alert('تعذر حذف الصورة',error.message);else{setAvatarKey(null);setAvatarUrl(null);await supabase.storage.from('avatars').remove([old]);}setPhotoBusy(false);}
  async function logout(){const {error}=await supabase.auth.signOut();if(error)Alert.alert('خطأ',error.message);else router.replace('/login');}
- async function deleteAccount(){Alert.alert('حذف الحساب نهائيًا','سيؤدي ذلك إلى حذف حسابك وصورتك وأصدقائك ورسائلك الصوتية وإشعاراتك. لا يمكن التراجع عن هذه العملية.',[{text:'إلغاء',style:'cancel'},{text:'حذف نهائي',style:'destructive',onPress:async()=>{setBusy(true);const {error}=await supabase.functions.invoke('delete-account',{method:'POST'});setBusy(false);if(error){Alert.alert('تعذر حذف الحساب',error.message);return;}await supabase.auth.signOut().catch(()=>{});router.replace('/login');}}]);}
+ async function deleteAccount(){Alert.alert('حذف الحساب نهائيًا','سيؤدي ذلك إلى حذف حسابك وصورتك وأصدقائك ورسائلك الصوتية وإشعاراتك. لا يمكن التراجع عن هذه العملية.',[{text:'إلغاء',style:'cancel'},{text:'حذف نهائي',style:'destructive',onPress:async()=>{setBusy(true);const {error}=await supabase.functions.invoke('delete-account',{method:'POST'});setBusy(false);if(error){Alert.alert('تعذر حذف الحساب',error.message);return;}await clearLocalVoiceCache().catch(()=>{});await supabase.auth.signOut().catch(()=>{});router.replace('/login');}}]);}
  const input={backgroundColor:'#F3F4F3',padding:15,borderRadius:12,marginTop:12,textAlign:'right' as const,fontSize:15};
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:24,paddingTop:68,paddingBottom:40}}>
   <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>حسابي</Text>
