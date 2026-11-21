@@ -1,25 +1,24 @@
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { supabase, isSupabaseConfigured } from '../src/lib/supabase';
+import { supabase } from '../src/lib/supabase';
 const green = '#8BC99A';
 export default function Login() {
-  const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [busy,setBusy]=useState(false);
+  const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [displayName,setDisplayName]=useState(''); const [busy,setBusy]=useState(false);
   async function signIn(){
-    if(!isSupabaseConfigured){Alert.alert('إعداد مطلوب','أضف بيانات Supabase في ملف .env أولاً.');return;}
     if(!email.trim()||!password){Alert.alert('تنبيه','أدخل البريد وكلمة المرور.');return;}
     setBusy(true); const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password}); setBusy(false);
     if(error) Alert.alert('تعذر الدخول',error.message); else router.replace('/(tabs)');
   }
   async function signUp(){
-    if(!isSupabaseConfigured){Alert.alert('إعداد مطلوب','أضف بيانات Supabase في ملف .env أولاً.');return;}
-    if(!email.trim()||password.length<8){Alert.alert('تنبيه','أدخل بريدًا صحيحًا وكلمة مرور من 8 أحرف على الأقل.');return;}
-    setBusy(true); const {error}=await supabase.auth.signUp({email:email.trim(),password}); setBusy(false);
-    if(error) Alert.alert('تعذر التسجيل',error.message); else Alert.alert('تم','تحقق من بريدك الإلكتروني لتأكيد الحساب.');
+    if(!email.trim()||password.length<8||!displayName.trim()){Alert.alert('تنبيه','أدخل الاسم والبريد وكلمة مرور من 8 أحرف على الأقل.');return;}
+    setBusy(true); const {error}=await supabase.auth.signUp({email:email.trim(),password,options:{data:{full_name:displayName.trim()}}}); setBusy(false);
+    if(error) Alert.alert('تعذر التسجيل',error.message); else Alert.alert('تم إنشاء الحساب','تحقق من بريدك الإلكتروني لتأكيد الحساب.');
   }
   return <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{flex:1,justifyContent:'center',padding:26,backgroundColor:'#FFF'}}>
     <Text style={{fontSize:36,fontWeight:'800',textAlign:'center',color:'#111',marginBottom:8}}>منصت</Text>
-    <Text style={{fontSize:16,textAlign:'center',color:'#777',marginBottom:34}}>تواصل صوتي بسيط وآمن</Text>
+    <Text style={{fontSize:16,textAlign:'center',color:'#777',marginBottom:28}}>تواصل صوتي بسيط وآمن</Text>
+    <TextInput value={displayName} onChangeText={setDisplayName} placeholder="اسمك الظاهر (للحساب الجديد)" style={input}/>
     <TextInput value={email} onChangeText={setEmail} placeholder="البريد الإلكتروني" keyboardType="email-address" autoCapitalize="none" style={input}/>
     <TextInput value={password} onChangeText={setPassword} placeholder="كلمة المرور" secureTextEntry style={input}/>
     <Pressable disabled={busy} onPress={signIn} style={button}><Text style={buttonText}>{busy?'يرجى الانتظار…':'تسجيل الدخول'}</Text></Pressable>
