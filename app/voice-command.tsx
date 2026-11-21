@@ -34,15 +34,21 @@ export default function VoiceCommand(){
 
  async function pauseDownload(){
   const task=downloadRef.current;if(!task)return;
-  try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved){await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));setResumeAvailable(true);}}catch{}
-  downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
+  try{
+   pauseRequestedRef.current=true;await task.pauseAsync();
+   const saved=task.savable?.();
+   if(saved){await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));setResumeAvailable(true);}
+   else{await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});await AsyncStorage.removeItem(RESUME_KEY);setResumeAvailable(false);}
+   downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
+  }catch{pauseRequestedRef.current=false;setStatus('تعذر إيقاف التنزيل مؤقتًا؛ سيستمر ما دام التطبيق مفتوحًا.');}
  }
  async function downloadModel(){
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي المحلي مضبوط حاليًا لأجهزة Android.');return;}
+  let safeToCleanZip=false;
   setDownloading(true);setStatus('جارٍ تنزيل النموذج العربي…');progressRef.current={bytes:0,time:Date.now()};
   try{
    await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});
-   const freeSpace=await FileSystem.getFreeDiskStorageAsync();if(freeSpace<350*1024*1024)throw new Error('تحتاج إلى توفير مساحة خالية لا تقل عن 350 ميجابايت قبل تثبيت النموذج.');
+   const freeSpace=await FileSystem.getFreeDiskStorageAsync();if(freeSpace<350*1024*1024)throw new Error('تحتاج إلى توفير مساحة خالية لا تقل عن 350 ميجابايت قبل تثبيت النموذج.');safeToCleanZip=true;
    const savedRaw=await AsyncStorage.getItem(RESUME_KEY);const saved=savedRaw?JSON.parse(savedRaw):null;
    if(saved?.resumeData){const partial=await FileSystem.getInfoAsync(ZIP_PATH);const written=partial.exists?(partial.size||0):0;progressRef.current={bytes:written,time:Date.now()};setProgress(Math.min(100,written/EXPECTED_BYTES*100));}
    const existingZip=await FileSystem.getInfoAsync(ZIP_PATH);
@@ -72,7 +78,7 @@ export default function VoiceCommand(){
    await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});
    const check=await FileSystem.getInfoAsync(MODEL_PATH);if(!check.exists)throw new Error('فشل التحقق من تثبيت النموذج.');
    setModelReady(true);setStatus('النموذج مثبت وجاهز للتعرف دون إنترنت.');
-  }catch(e:any){setDownloading(false);if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}setStatus('تعذر إكمال التنزيل أو التثبيت. يمكنك المحاولة أو الاستكمال.');Alert.alert('تعذر تثبيت النموذج',e?.message||'تحقق من اتصال الإنترنت والمساحة المتاحة.');}
+  }catch(e:any){setDownloading(false);if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}if(safeToCleanZip){await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});await AsyncStorage.removeItem(RESUME_KEY).catch(()=>{});setResumeAvailable(false);}setStatus('تعذر إكمال التنزيل أو التثبيت. يمكنك المحاولة أو الاستكمال.');Alert.alert('تعذر تثبيت النموذج',e?.message||'تحقق من اتصال الإنترنت والمساحة المتاحة.');}
   finally{setExtracting(false);}
  }
 
