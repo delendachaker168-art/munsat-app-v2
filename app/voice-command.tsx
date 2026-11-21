@@ -42,6 +42,7 @@ export default function VoiceCommand(){
   try{
    await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});
    const savedRaw=await AsyncStorage.getItem(RESUME_KEY);const saved=savedRaw?JSON.parse(savedRaw):null;
+   if(saved?.resumeData){const partial=await FileSystem.getInfoAsync(ZIP_PATH);const written=partial.exists?(partial.size||0):0;progressRef.current={bytes:written,time:Date.now()};setProgress(Math.min(100,written/EXPECTED_BYTES*100));}
    const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP_PATH,{},(event)=>{
     const total=event.totalBytesExpectedToWrite>0?event.totalBytesExpectedToWrite:EXPECTED_BYTES;
     const now=Date.now();const delta=event.totalBytesWritten-progressRef.current.bytes;const elapsed=Math.max(.25,(now-progressRef.current.time)/1000);
