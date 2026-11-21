@@ -27,7 +27,8 @@
           "iOSMicrophonePermission": "يحتاج منصت إلى الميكروفون للتعرف على الأوامر الصوتية محليًا."
         }
       ],
-      "react-native-zip-archive"
+      "react-native-zip-archive",
+      "./plugins/with-munsat-foreground-service"
     ],
     "experiments": {
       "typedRoutes": true
