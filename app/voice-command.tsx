@@ -30,9 +30,9 @@ export default function VoiceCommand(){
  const downloadRef=useRef<any>(null);const pauseRequestedRef=useRef(false);const voskRef=useRef<any>(null);const modelLoadedRef=useRef(false);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
 
  useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();MunsatForegroundService.stop();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
- useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload(true).catch(()=>{});}});return()=>sub.remove();},[]);
+ useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload().catch(()=>{});}});return()=>sub.remove();},[]);
 
- async function pauseDownload(silent=false){
+ async function pauseDownload(){
   const task=downloadRef.current;if(!task)return;
   try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved)await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));}catch{}
   downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
