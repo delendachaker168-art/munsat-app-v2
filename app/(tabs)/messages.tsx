@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocalSearchParams,useFocusEffect } from 'expo-router';
-import { Alert, AppState, Image, Pressable, ScrollView, Text, View } from 'react-native';
-import * as Speech from 'expo-speech';
+import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { supabase } from '../../src/lib/supabase';
@@ -75,31 +74,6 @@ export default function Messages(){
   setMessages((msg||[]) as Message[]);setMessageOffset(20);setHasMoreMessages((msg||[]).length===20);
  },[]);
  useFocusEffect(useCallback(()=>{load();},[load]));
- // Announce only the arrival cue; never read or play the message automatically.
- useEffect(()=>{
-  let channel:any=null;let active=true;const announced=new Set<string>();
-  (async()=>{
-   const {data}=await supabase.auth.getUser();const user=data.user;if(!user||!active)return;
-   channel=supabase.channel('incoming-voice-'+user.id)
-    .on('postgres_changes',{event:'INSERT',schema:'public',table:'voice_messages',filter:'recipient_id=eq.'+user.id},async(payload:any)=>{
-     const row=payload.new as Message;
-     if(!active||!row?.id||announced.has(row.id)||row.recipient_id!==user.id)return;
-     announced.add(row.id);if(announced.size>40){const first=announced.values().next().value;if(first)announced.delete(first);}
-     // The spoken slot is the recipient's own slot assigned to this sender.
-     const {data:slot}=await supabase.from('voice_slots').select('slot_number').eq('owner_id',user.id).eq('friend_id',row.sender_id).maybeSingle();
-     const number=Number(slot?.slot_number||row.slot_number);
-     if(AppState.currentState!=='active'||!Number.isInteger(number)||number<1||number>5)return;
-     Speech.stop();
-     Speech.speak('رسالة من '+['واحد','اثنين','ثلاثة','أربعة','خمسة'][number-1],{language:'ar-SA',rate:0.9});
-    })
-    .subscribe();
-  })();
-  return()=>{active=false;if(channel)supabase.removeChannel(channel);Speech.stop();};
- },[]);
- useEffect(()=>{
-  (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});setMicReady(p.granted);})();
-  return()=>{if(timer.current)clearTimeout(timer.current);};
- },[load]);
  async function loadMoreMessages(){
   if(loadingMore||!hasMoreMessages)return;
   setLoadingMore(true);
