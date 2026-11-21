@@ -3,7 +3,7 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { supabase } from '../../src/lib/supabase';
-import { cacheVoiceMessage, getCachedVoiceUri, pruneExpiredVoiceCache } from '../../src/lib/local-audio';
+import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null}|null };
 type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string };
@@ -61,7 +61,7 @@ export default function Messages(){
   setMessages((msg||[]) as Message[]);
  },[]);
  useEffect(()=>{
-  load();pruneExpiredVoiceCache().catch(()=>{});
+  load();
   (async()=>{const p=await AudioModule.requestRecordingPermissionsAsync();if(!p.granted)Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون لتسجيل الرسائل.');await setAudioModeAsync({playsInSilentMode:true,allowsRecording:true});})();
   return()=>{if(timer.current)clearTimeout(timer.current);};
  },[load]);
