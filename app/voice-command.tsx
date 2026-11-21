@@ -26,15 +26,15 @@ function formatTime(seconds:number){if(!Number.isFinite(seconds)||seconds<0)retu
 
 export default function VoiceCommand(){
  const [modelReady,setModelReady]=useState(false);const [downloading,setDownloading]=useState(false);const [extracting,setExtracting]=useState(false);const [loadingModel,setLoadingModel]=useState(false);const [listening,setListening]=useState(false);
- const [progress,setProgress]=useState(0);const [speed,setSpeed]=useState(0);const [eta,setEta]=useState(0);const [partial,setPartial]=useState('');const [recognized,setRecognized]=useState('');const [pendingSlot,setPendingSlot]=useState<number|null>(null);const [status,setStatus]=useState('النموذج العربي غير مثبت بعد.');
+ const [progress,setProgress]=useState(0);const [resumeAvailable,setResumeAvailable]=useState(false);const [speed,setSpeed]=useState(0);const [eta,setEta]=useState(0);const [partial,setPartial]=useState('');const [recognized,setRecognized]=useState('');const [pendingSlot,setPendingSlot]=useState<number|null>(null);const [status,setStatus]=useState('النموذج العربي غير مثبت بعد.');
  const downloadRef=useRef<any>(null);const pauseRequestedRef=useRef(false);const voskRef=useRef<any>(null);const modelLoadedRef=useRef(false);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
 
- useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();MunsatForegroundService.stop();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
+ useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});setResumeAvailable(Boolean(await AsyncStorage.getItem(RESUME_KEY)));const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();MunsatForegroundService.stop();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
  useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload().catch(()=>{});}});return()=>sub.remove();},[]);
 
  async function pauseDownload(){
   const task=downloadRef.current;if(!task)return;
-  try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved)await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));}catch{}
+  try{pauseRequestedRef.current=true;await task.pauseAsync();const saved=task.savable?.();if(saved){await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));setResumeAvailable(true);}}catch{}
   downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
  }
  async function downloadModel(){
@@ -60,7 +60,7 @@ export default function VoiceCommand(){
     if(!result||result.status<200||result.status>=300)throw new Error('لم يكتمل تنزيل ملف النموذج.');
    }
    downloadRef.current=null;setDownloading(false);
-   await AsyncStorage.removeItem(RESUME_KEY);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
+   await AsyncStorage.removeItem(RESUME_KEY);setResumeAvailable(false);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
    const zipInfo=await FileSystem.getInfoAsync(ZIP_PATH);if(!zipInfo.exists||(zipInfo.size||0)<1024*1024)throw new Error('ملف النموذج غير مكتمل.');
    const output=ROOT+'unpacked';await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.makeDirectoryAsync(output,{intermediates:true});
    const subscription=subscribe(({progress:fileProgress})=>setProgress(Math.min(100,fileProgress*100)));
@@ -104,7 +104,7 @@ export default function VoiceCommand(){
   if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}setPendingSlot(null);
   router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});
  }
- const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':'تنزيل النموذج العربي';
+ const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':resumeAvailable?'استكمال التنزيل':'تنزيل النموذج العربي';
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
   <View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الأوامر الصوتية</Text><Pressable onPress={()=>router.back()}><Text style={{color:'#4F9864'}}>رجوع</Text></Pressable></View>
   <Text style={{textAlign:'right',color:'#777',lineHeight:25,marginTop:8}}>تحكم في خاناتك بصوتك. تتم معالجة الكلام محليًا على الجهاز دون إرساله إلى خادم.</Text>
