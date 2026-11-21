@@ -1,5 +1,6 @@
-import { useCallback,useEffect,useState } from 'react';
+import { useCallback,useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '../../src/lib/supabase';
 type Profile={id:string;display_name:string|null;bio:string|null;avatar_key:string|null};
 type Friendship={id:string;requester_id:string;addressee_id:string;status:string;requester?:Profile;addressee?:Profile};
@@ -15,7 +16,7 @@ export default function Friends(){
   const rows=(req||[]) as unknown as Friendship[];setRequests(rows.filter(x=>x.status==='pending'&&x.addressee_id===data.user!.id));setFriendships(rows.filter(x=>x.status==='accepted'));
   const {data:sl}=await supabase.from('voice_slots').select('slot_number,friend_id').eq('owner_id',data.user.id);const map:Record<number,string|null>={};(sl||[]).forEach(x=>map[x.slot_number]=x.friend_id);setSlots(map);
  },[]);
- useEffect(()=>{load();},[load]);
+ useFocusEffect(useCallback(()=>{load();},[load]));
  async function search(){if(!query.trim())return;const {data,error}=await supabase.from('profiles').select('id,display_name,bio,avatar_key').ilike('display_name','%'+query.trim()+'%').neq('id',me).limit(10);if(error)Alert.alert('تعذر البحث',error.message);else setResults((data||[]) as Profile[]);}
  async function add(p:Profile){
   const pair='and(requester_id.eq.'+me+',addressee_id.eq.'+p.id+'),and(requester_id.eq.'+p.id+',addressee_id.eq.'+me+')';
