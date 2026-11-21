@@ -1,8 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-export const supabase = createClient(url || 'https://example.supabase.co', key || 'missing-anon-key', {
-  auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false }
+
+// Supabase publishable keys are designed for use in client applications.
+// Row-level security is enabled on all user-facing tables and Storage objects.
+const url = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://pnnndxccktgngrlbzscy.supabase.co';
+const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_vqDidOOCNaplDnyle0_hQg_ZF5B-Jwe';
+
+export const supabase = createClient(url, key, {
+  auth: { storage: AsyncStorage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
 });
 export const isSupabaseConfigured = Boolean(url && key);
