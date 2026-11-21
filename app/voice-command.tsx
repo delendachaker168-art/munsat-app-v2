@@ -45,16 +45,21 @@ export default function VoiceCommand(){
    const freeSpace=await FileSystem.getFreeDiskStorageAsync();if(freeSpace<350*1024*1024)throw new Error('تحتاج إلى توفير مساحة خالية لا تقل عن 350 ميجابايت قبل تثبيت النموذج.');
    const savedRaw=await AsyncStorage.getItem(RESUME_KEY);const saved=savedRaw?JSON.parse(savedRaw):null;
    if(saved?.resumeData){const partial=await FileSystem.getInfoAsync(ZIP_PATH);const written=partial.exists?(partial.size||0):0;progressRef.current={bytes:written,time:Date.now()};setProgress(Math.min(100,written/EXPECTED_BYTES*100));}
-   const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP_PATH,{},(event)=>{
-    const total=event.totalBytesExpectedToWrite>0?event.totalBytesExpectedToWrite:EXPECTED_BYTES;
-    const now=Date.now();const delta=event.totalBytesWritten-progressRef.current.bytes;const elapsed=Math.max(.25,(now-progressRef.current.time)/1000);
-    if(delta>=0){setSpeed(delta/elapsed);setEta((total-event.totalBytesWritten)/Math.max(1,delta/elapsed));}
-    progressRef.current={bytes:event.totalBytesWritten,time:now};setProgress(Math.min(100,event.totalBytesWritten/total*100));
-   },saved?.resumeData);
-   downloadRef.current=task;
-   const result=saved?.resumeData?await task.resumeAsync():await task.downloadAsync();
+   const existingZip=await FileSystem.getInfoAsync(ZIP_PATH);
+   const zipAlreadyDownloaded=existingZip.exists&&(existingZip.size||0)>1024*1024&&!saved?.resumeData;
+   if(!zipAlreadyDownloaded){
+    const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP_PATH,{},(event)=>{
+     const total=event.totalBytesExpectedToWrite>0?event.totalBytesExpectedToWrite:EXPECTED_BYTES;
+     const now=Date.now();const delta=event.totalBytesWritten-progressRef.current.bytes;const elapsed=Math.max(.25,(now-progressRef.current.time)/1000);
+     if(delta>=0){setSpeed(delta/elapsed);setEta((total-event.totalBytesWritten)/Math.max(1,delta/elapsed));}
+     progressRef.current={bytes:event.totalBytesWritten,time:now};setProgress(Math.min(100,event.totalBytesWritten/total*100));
+    },saved?.resumeData);
+    downloadRef.current=task;
+    const result=saved?.resumeData?await task.resumeAsync():await task.downloadAsync();
+    if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}
+    if(!result||result.status<200||result.status>=300)throw new Error('لم يكتمل تنزيل ملف النموذج.');
+   }
    downloadRef.current=null;setDownloading(false);
-   if(!result||result.status<200||result.status>=300)throw new Error('لم يكتمل تنزيل ملف النموذج.');
    await AsyncStorage.removeItem(RESUME_KEY);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
    const zipInfo=await FileSystem.getInfoAsync(ZIP_PATH);if(!zipInfo.exists||(zipInfo.size||0)<1024*1024)throw new Error('ملف النموذج غير مكتمل.');
    const output=ROOT+'unpacked';await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.makeDirectoryAsync(output,{intermediates:true});
