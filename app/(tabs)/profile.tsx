@@ -27,6 +27,7 @@ export default function Profile(){
  }
  async function deletePhoto(){if(!avatarKey)return;const {data}=await supabase.auth.getUser();if(!data.user)return;setPhotoBusy(true);const old=avatarKey;const {error}=await supabase.from('profiles').update({avatar_key:null,updated_at:new Date().toISOString()}).eq('id',data.user.id);if(error)Alert.alert('تعذر حذف الصورة',error.message);else{setAvatarKey(null);setAvatarUrl(null);await supabase.storage.from('avatars').remove([old]);}setPhotoBusy(false);}
  async function logout(){const {error}=await supabase.auth.signOut();if(error)Alert.alert('خطأ',error.message);else router.replace('/login');}
+ async function deleteAccount(){Alert.alert('حذف الحساب نهائيًا','سيؤدي ذلك إلى حذف حسابك وصورتك وأصدقائك ورسائلك الصوتية وإشعاراتك. لا يمكن التراجع عن هذه العملية.',[{text:'إلغاء',style:'cancel'},{text:'حذف نهائي',style:'destructive',onPress:async()=>{setBusy(true);const {error}=await supabase.functions.invoke('delete-account',{method:'POST'});setBusy(false);if(error){Alert.alert('تعذر حذف الحساب',error.message);return;}await supabase.auth.signOut().catch(()=>{});router.replace('/login');}}]);}
  const input={backgroundColor:'#F3F4F3',padding:15,borderRadius:12,marginTop:12,textAlign:'right' as const,fontSize:15};
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:24,paddingTop:68,paddingBottom:40}}>
   <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>حسابي</Text>
@@ -39,5 +40,6 @@ export default function Profile(){
   <TextInput value={bio} onChangeText={setBio} placeholder="نبذة قصيرة (اختياري)" multiline style={[input,{minHeight:90,textAlignVertical:'top'}]}/>
   <Pressable onPress={save} disabled={busy} style={{backgroundColor:'#8BC99A',padding:16,borderRadius:12,marginTop:16}}><Text style={{textAlign:'center',fontWeight:'800'}}>{busy?'جارٍ الحفظ…':'حفظ التعديلات'}</Text></Pressable>
   <Pressable onPress={logout} style={{backgroundColor:'#F1F1F1',padding:16,borderRadius:12,marginTop:12}}><Text style={{textAlign:'center',color:'#333'}}>تسجيل الخروج</Text></Pressable>
+  <Pressable disabled={busy} onPress={deleteAccount} style={{backgroundColor:'#F8E7E7',padding:15,borderRadius:12,marginTop:26}}><Text style={{textAlign:'center',color:'#9B2929',fontWeight:'700'}}>حذف الحساب نهائيًا</Text></Pressable>
  </ScrollView>;
 }
