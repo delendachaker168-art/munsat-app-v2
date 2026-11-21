@@ -42,6 +42,7 @@ export default function VoiceCommand(){
   setDownloading(true);setStatus('جارٍ تنزيل النموذج العربي…');progressRef.current={bytes:0,time:Date.now()};
   try{
    await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});
+   const freeSpace=await FileSystem.getFreeDiskStorageAsync();if(freeSpace<350*1024*1024)throw new Error('تحتاج إلى توفير مساحة خالية لا تقل عن 350 ميجابايت قبل تثبيت النموذج.');
    const savedRaw=await AsyncStorage.getItem(RESUME_KEY);const saved=savedRaw?JSON.parse(savedRaw):null;
    if(saved?.resumeData){const partial=await FileSystem.getInfoAsync(ZIP_PATH);const written=partial.exists?(partial.size||0):0;progressRef.current={bytes:written,time:Date.now()};setProgress(Math.min(100,written/EXPECTED_BYTES*100));}
    const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP_PATH,{},(event)=>{
@@ -104,7 +105,7 @@ export default function VoiceCommand(){
   <Text style={{textAlign:'right',color:'#777',lineHeight:25,marginTop:8}}>تحكم في خاناتك بصوتك. تتم معالجة الكلام محليًا على الجهاز دون إرساله إلى خادم.</Text>
   <View style={{backgroundColor:'#F3F4F3',borderRadius:16,padding:18,marginTop:22}}>
    <Text style={{textAlign:'right',fontWeight:'800',fontSize:17,color:'#222'}}>النموذج العربي المحلي</Text>
-   <Text style={{textAlign:'right',color:'#666',lineHeight:23,marginTop:8}}>حجم التنزيل نحو 158 ميجابايت، وقد يحتاج فك الضغط إلى مساحة إضافية. بعد تثبيته يعمل التعرف دون إنترنت.</Text>
+   <Text style={{textAlign:'right',color:'#666',lineHeight:23,marginTop:8}}>حجم التنزيل نحو 158 ميجابايت، ويُفضّل توفير 350 ميجابايت على الأقل لفك الضغط. بعد تثبيته يعمل التعرف دون إنترنت.</Text>
    <Text style={{textAlign:'right',color:'#4F9864',fontWeight:'700',marginTop:12}}>{status}</Text>
    {downloading||extracting?<><View style={{height:9,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:14}}><View style={{height:9,width:Math.min(100,progress)+'%',backgroundColor:GREEN}}/></View><Text style={{textAlign:'right',color:'#555',marginTop:8}}>{downloading?Math.min(100,progress).toFixed(1)+'% · '+formatBytes(progress/100*EXPECTED_BYTES):'جارٍ فك الضغط…'}</Text>{downloading?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:5}}>السرعة: {formatBytes(speed)}/ث · المتبقي: {formatTime(eta)}</Text>:null}</>:null}
    {downloading?<Pressable onPress={()=>pauseDownload()} style={secondaryButton}><Text style={buttonText}>إيقاف مؤقت</Text></Pressable>:!modelReady?<Pressable disabled={extracting} onPress={downloadModel} style={primaryButton}><Text style={buttonText}>{extracting?'جارٍ التثبيت…':downloadLabel}</Text></Pressable>:<View style={{backgroundColor:'#E5F3E8',padding:13,borderRadius:10,marginTop:15}}><Text style={{textAlign:'center',color:'#356B43',fontWeight:'700'}}>✓ النموذج جاهز على جهازك</Text></View>}
