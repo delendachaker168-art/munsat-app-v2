@@ -13,7 +13,7 @@ type Message = { id:string; sender_id:string; recipient_id:string; slot_number:n
 const green='#8BC99A';
 const VOSK_MODEL_PATH=(FileSystem.documentDirectory||'')+'vosk/model-ar-tn';
 const CLOSE_GRAMMAR=['أغلق','اغلق','إغلاق','اغلاق','[unk]'];
-function normalizeVoiceCommand(value:string){return value.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[.,،؛!?؟]/g,' ').replace(/\\s+/g,' ').trim();}
+function normalizeVoiceCommand(value:string){return value.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
 function voiceResultText(value:any):string{return typeof value==='string'?value:typeof value?.text==='string'?value.text:typeof value?.result==='string'?value.result:'';}
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
