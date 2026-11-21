@@ -7,7 +7,10 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "plugins": ["expo-router", "expo-audio"],
+    "plugins": [
+      "expo-router",
+      ["expo-audio", { "microphonePermission": "السماح لمنصت باستخدام الميكروفون لتسجيل الرسائل الصوتية." }]
+    ],
     "experiments": { "typedRoutes": true },
     "android": { "package": "com.delendasmartsolutions.munsat", "versionCode": 1 },
     "ios": { "bundleIdentifier": "com.delendasmartsolutions.munsat" }
