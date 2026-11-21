@@ -7,7 +7,7 @@ import { supabase } from '../../src/lib/supabase';
 import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
-type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string };
+type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
 const green='#8BC99A';
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
@@ -38,7 +38,7 @@ function VoiceMessageCard({message,currentUserId}:{message:Message;currentUserId
   finally{setLoading(false);}
  }
  return <View style={{padding:15,backgroundColor:'#F4F5F4',borderRadius:12,marginBottom:9}}>
-  <Text style={{textAlign:'right',fontWeight:'700',color:'#333'}}>{message.sender_id===currentUserId?'رسالة مرسلة':'رسالة واردة'} · {fmt(message.duration_ms)}</Text>
+  <View style={{flexDirection:'row-reverse',alignItems:'center',gap:9}}>{message.sender_id!==currentUserId&&message.sender?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(message.sender.avatar_key).data.publicUrl}} style={{width:34,height:34,borderRadius:17}}/>:null}<View style={{flex:1}}><Text style={{textAlign:'right',fontWeight:'700',color:'#333'}}>{message.sender_id===currentUserId?'إلى '+(message.recipient?.display_name||'صديق'):'من '+(message.sender?.display_name||'صديق')} · {fmt(message.duration_ms)}</Text>{message.recipient_id===currentUserId?<Text style={{textAlign:'right',fontSize:11,color:'#888',marginTop:3}}>{message.listened_at?'تم الاستماع':'لم تُسمع بعد'}</Text>:null}</View></View>
   <Text style={{textAlign:'right',color:'#888',fontSize:12,marginTop:5}}>{new Date(message.created_at).toLocaleString('ar')}</Text>
   <Pressable onPress={play} disabled={loading} style={{alignSelf:'flex-end',backgroundColor:green,paddingHorizontal:18,paddingVertical:9,borderRadius:9,marginTop:10}}>
    <Text style={{color:'#17351E',fontWeight:'700'}}>{loading?'جارٍ التحميل…':status.playing?'إيقاف مؤقت':'استماع'}</Text>
@@ -59,7 +59,7 @@ export default function Messages(){
   if(error){Alert.alert('تعذر تحميل الخانات',error.message);return;}
   if(!slotData?.length){await supabase.from('voice_slots').upsert([1,2,3,4,5].map(slot_number=>({owner_id:user.id,slot_number,friend_id:null})),{onConflict:'owner_id,slot_number'});setSlots([1,2,3,4,5].map(slot_number=>({slot_number,friend_id:null,friend:null})));}
   else setSlots(slotData as unknown as Slot[]);
-  const {data:msg}=await supabase.from('voice_messages').select('*').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).limit(20);
+  const {data:msg}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).limit(20);
   setMessages((msg||[]) as Message[]);
  },[]);
  useEffect(()=>{
