@@ -35,7 +35,7 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
       await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
      }
     }else{
-     const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,600);
+     const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,3600);
      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
      uri=data.signedUrl;
     }
