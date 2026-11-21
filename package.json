@@ -28,7 +28,8 @@
     "react-native-screens": "~4.16.0",
     "expo-image-picker": "~17.0.11",
     "react-native-vosk": "^2.1.7",
-    "react-native-zip-archive": "^9.5.3"
+    "react-native-zip-archive": "^9.5.3",
+    "expo-speech": "~14.0.7"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
