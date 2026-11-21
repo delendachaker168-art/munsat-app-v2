@@ -1,11 +1,11 @@
 import { useCallback,useEffect,useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router,useFocusEffect } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 type Notice={id:string;type:string;title:string;body:string|null;read_at:string|null;created_at:string};
 export default function Notifications(){const [items,setItems]=useState<Notice[]>([]);const [busy,setBusy]=useState(false);
  const load=useCallback(async()=>{const {data,error}=await supabase.from('notifications').select('id,type,title,body,read_at,created_at').order('created_at',{ascending:false}).limit(50);if(error)Alert.alert('تعذر تحميل الإشعارات',error.message);else setItems((data||[]) as Notice[]);},[]);
- useEffect(()=>{load();},[load]);
+ useFocusEffect(useCallback(()=>{load();},[load]));
  async function markRead(id:string){const {error}=await supabase.from('notifications').update({read_at:new Date().toISOString()}).eq('id',id);if(error)Alert.alert('تعذر تحديث الإشعار',error.message);else setItems(v=>v.map(x=>x.id===id?{...x,read_at:new Date().toISOString()}:x));}
  async function markAll(){setBusy(true);const {error}=await supabase.from('notifications').update({read_at:new Date().toISOString()}).is('read_at',null);setBusy(false);if(error)Alert.alert('تعذر تحديث الإشعارات',error.message);else load();}
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}><View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',color:'#111'}}>الإشعارات</Text><Pressable onPress={()=>router.back()}><Text style={{color:'#4F9864'}}>رجوع</Text></Pressable></View>
