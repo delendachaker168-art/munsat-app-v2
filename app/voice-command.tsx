@@ -96,7 +96,7 @@ export default function VoiceCommand(){
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
    listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
    listenersRef.current.push(voskRef.current.onResult((value:any)=>{
-    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();MunsatForegroundService.stop();setListening(false);
+    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();MunsatForegroundService.stop();setListening(false);try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}
     const slot=parseSlot(text);if(slot){setStatus('تم التعرف على الخانة '+slot+'؛ جارٍ فتحها وبدء التسجيل.');router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});}else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
    }));
    listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');MunsatForegroundService.stop();setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
