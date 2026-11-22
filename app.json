@@ -28,6 +28,13 @@
           "iOSMicrophonePermission": "يحتاج منصت إلى الميكروفون للتعرف على الأوامر الصوتية محليًا."
         }
       ],
+      [
+        "expo-notifications",
+        {
+          "color": "#9AD9A5",
+          "defaultChannel": "voice-messages"
+        }
+      ],
       "react-native-zip-archive",
       "./plugins/with-munsat-foreground-service"
     ],
