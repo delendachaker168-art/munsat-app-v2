@@ -220,6 +220,7 @@ export default function Messages(){
   }));
   void (async()=>{
    try{
+    await MunsatAudioCapture.stopSession();
     await MunsatAudioCapture.startSession(MODEL,IDLE_GRAMMAR,RECORD_GRAMMAR);
     if(!active)return;setVoiceSessionReady(true);
     const playSlot=typeof params.playSlot==='string'?params.playSlot:null;

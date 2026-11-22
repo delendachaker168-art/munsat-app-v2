@@ -20,7 +20,7 @@ function playSlotFrom(s:string){const t=normalize(s);const m=t.match(/سماع (
 export default function VoiceCommand(){
  const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[listening,setListening]=useState(false),[progress,setProgress]=useState(0),[status,setStatus]=useState('جارٍ فحص أداة التعرف الصوتي…'),[heard,setHeard]=useState('');
  const listeners=useRef<any[]>([]),mounted=useRef(true),routeHandled=useRef(false);
- useEffect(()=>{mounted.current=true;(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL);if(info.exists){const files=await FileSystem.readDirectoryAsync(MODEL);if(files.includes('am')&&files.includes('conf')){setReady(true);setStatus('أداة التعرف الصوتي مثبتة؛ جارٍ بدء الاستماع تلقائيًا.');await startListening();return;}}setStatus('أداة التعرف الصوتي غير مثبتة. نزّلها مرة واحدة لتعمل الأوامر دون إنترنت.');}catch(e:any){setStatus('تعذر فحص ملفات التعرف الصوتي: '+(e?.message||''));}})();return()=>{mounted.current=false;void MunsatAudioCapture.stopSession();listeners.current.forEach(x=>x?.remove?.());};},[]);
+ useEffect(()=>{mounted.current=true;(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL);if(info.exists){const files=await FileSystem.readDirectoryAsync(MODEL);if(files.includes('am')&&files.includes('conf')){setReady(true);setStatus('أداة التعرف الصوتي مثبتة؛ جارٍ بدء الاستماع تلقائيًا.');await startListening();return;}}setStatus('أداة التعرف الصوتي غير مثبتة. نزّلها مرة واحدة لتعمل الأوامر دون إنترنت.');}catch(e:any){setStatus('تعذر فحص ملفات التعرف الصوتي: '+(e?.message||''));}})();return()=>{mounted.current=false;if(!routeHandled.current)void MunsatAudioCapture.stopSession();listeners.current.forEach(x=>x?.remove?.());};},[]);
  function clearListeners(){listeners.current.forEach(x=>x?.remove?.());listeners.current=[];}
  async function downloadModel(){
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي متاح حاليًا على Android فقط.');return;}
@@ -48,7 +48,7 @@ export default function VoiceCommand(){
    const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted)throw new Error('اسمح لمنصت باستخدام الميكروفون.');
    if(Platform.Version>=33){const n=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);if(n!==PermissionsAndroid.RESULTS.GRANTED)setStatus('يمكنك الاستماع أثناء فتح التطبيق؛ الإشعار غير مفعّل.');}
    setBusy(true);setStatus('جارٍ تشغيل التعرف الصوتي عبر الميكروفون المشترك…');
-   clearListeners();routeHandled.current=false;setHeard('');
+   await MunsatAudioCapture.stopSession();clearListeners();routeHandled.current=false;setHeard('');
    listeners.current.push(MunsatAudioCapture.addListener('onCommand',(v:any)=>{
     if(!mounted.current||routeHandled.current)return;
     const recognized=textOf(v);if(!recognized)return;setHeard(recognized);
