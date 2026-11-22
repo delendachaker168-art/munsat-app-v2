@@ -4,7 +4,8 @@ const PERMISSIONS = [
   'android.permission.RECORD_AUDIO',
   'android.permission.POST_NOTIFICATIONS',
   'android.permission.FOREGROUND_SERVICE',
-  'android.permission.FOREGROUND_SERVICE_MICROPHONE'
+  'android.permission.FOREGROUND_SERVICE_MICROPHONE',
+  'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
 ];
 
 module.exports = function withMunsatForegroundService(config) {
