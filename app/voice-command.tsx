@@ -1,9 +1,9 @@
 import { useEffect,useRef,useState } from 'react';
-import { Alert, AppState, PermissionsAndroid, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, AppState, PermissionsAndroid, Platform, Pressable, ScrollView, Text, View, type DimensionValue } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import Vosk from 'react-native-vosk';
+import * as Vosk from 'react-native-vosk';
 import { subscribe,unzip } from 'react-native-zip-archive';
 import { AudioModule } from 'expo-audio';
 import MunsatForegroundService from '../modules/munsat-foreground-service/src';
@@ -91,7 +91,7 @@ export default function VoiceCommand(){
   if(Platform.Version>=33){const notificationPermission=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);foregroundEnabled=notificationPermission===PermissionsAndroid.RESULTS.GRANTED;}
   setLoadingModel(true);setStatus('جارٍ تحميل النموذج في الذاكرة…');
   try{
-   if(!voskRef.current)voskRef.current=new Vosk();
+   if(!voskRef.current)voskRef.current=Vosk;
    if(!modelLoadedRef.current){const nativeModelPath=MODEL_PATH.startsWith('file://')?MODEL_PATH.replace('file://',''):MODEL_PATH;await voskRef.current.loadModel(nativeModelPath);modelLoadedRef.current=true;}
    removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
    listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
@@ -118,7 +118,7 @@ export default function VoiceCommand(){
    <Text style={{textAlign:'right',fontWeight:'800',fontSize:17,color:'#222'}}>النموذج العربي المحلي</Text>
    <Text style={{textAlign:'right',color:'#666',lineHeight:23,marginTop:8}}>حجم التنزيل نحو 158 ميجابايت، ويُفضّل توفير 350 ميجابايت على الأقل لفك الضغط. بعد تثبيته يعمل التعرف دون إنترنت.</Text>
    <Text style={{textAlign:'right',color:'#4F9864',fontWeight:'700',marginTop:12}}>{status}</Text>
-   {downloading||extracting?<><View style={{height:9,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:14}}><View style={{height:9,width:Math.min(100,progress)+'%',backgroundColor:GREEN}}/></View><Text style={{textAlign:'right',color:'#555',marginTop:8}}>{downloading?Math.min(100,progress).toFixed(1)+'% · '+formatBytes(progress/100*EXPECTED_BYTES):'جارٍ فك الضغط…'}</Text>{downloading?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:5}}>السرعة: {formatBytes(speed)}/ث · المتبقي: {formatTime(eta)}</Text>:null}</>:null}
+   {downloading||extracting?<><View style={{height:9,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:14}}><View style={{height:9,width:(Math.min(100,progress)+'%') as DimensionValue,backgroundColor:GREEN}}/></View><Text style={{textAlign:'right',color:'#555',marginTop:8}}>{downloading?Math.min(100,progress).toFixed(1)+'% · '+formatBytes(progress/100*EXPECTED_BYTES):'جارٍ فك الضغط…'}</Text>{downloading?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:5}}>السرعة: {formatBytes(speed)}/ث · المتبقي: {formatTime(eta)}</Text>:null}</>:null}
    {downloading?<Pressable onPress={()=>pauseDownload()} style={secondaryButton}><Text style={buttonText}>إيقاف مؤقت</Text></Pressable>:!modelReady?<Pressable disabled={extracting} onPress={downloadModel} style={primaryButton}><Text style={buttonText}>{extracting?'جارٍ التثبيت…':downloadLabel}</Text></Pressable>:<View style={{backgroundColor:'#E5F3E8',padding:13,borderRadius:10,marginTop:15}}><Text style={{textAlign:'center',color:'#356B43',fontWeight:'700'}}>✓ النموذج جاهز على جهازك</Text></View>}
    {modelReady?<Pressable disabled={loadingModel||downloading||extracting} onPress={listening?stopListening:startListening} style={[primaryButton,{backgroundColor:listening?'#D96B6B':GREEN}]}><Text style={buttonText}>{loadingModel?'جارٍ التحميل…':listening?'إيقاف الاستماع':'ابدأ الاستماع للأوامر'}</Text></Pressable>:null}
   </View>
