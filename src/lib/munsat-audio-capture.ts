@@ -18,6 +18,12 @@ type NativeCapture = {
   stopRecording(reason: 'manual' | 'command'): Promise<void>;
   cancelRecording(): Promise<void>;
   isRecording(): boolean;
+  startModelDownload(url: string, fileName: string): Promise<{ id: number; status: string }>;
+  getModelDownloadStatus(): Promise<{ status: string; downloadedBytes: number; totalBytes: number; fileUri?: string; reason?: number }>;
+  removeModelDownload(): Promise<void>;
+  isIgnoringBatteryOptimizations(): boolean;
+  requestBatteryOptimizationExemption(): Promise<void>;
+  openAppSettings(): Promise<void>;
 };
 
 let native: NativeCapture | null = null;
@@ -39,6 +45,15 @@ export const stopRecording = (reason: 'manual' | 'command') =>
   native ? native.stopRecording(reason) : unavailable();
 export const cancelRecording = () => native ? native.cancelRecording() : unavailable();
 export const isRecording = () => native?.isRecording() ?? false;
+export const startModelDownload = (url: string, fileName: string) =>
+  native ? native.startModelDownload(url, fileName) : unavailable();
+export const getModelDownloadStatus = () =>
+  native ? native.getModelDownloadStatus() : Promise.resolve({ status: 'none', downloadedBytes: 0, totalBytes: 0 });
+export const removeModelDownload = () => native ? native.removeModelDownload() : Promise.resolve();
+export const isIgnoringBatteryOptimizations = () => native?.isIgnoringBatteryOptimizations() ?? true;
+export const requestBatteryOptimizationExemption = () =>
+  native ? native.requestBatteryOptimizationExemption() : unavailable();
+export const openAppSettings = () => native ? native.openAppSettings() : unavailable();
 export const addListener = (
   event: 'onCommand' | 'onRecordingStarted' | 'onRecordingStopped' | 'onRecordingCancelled' | 'onCaptureError',
   listener: (payload: CaptureEvent) => void
