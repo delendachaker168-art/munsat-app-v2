@@ -246,7 +246,7 @@ class MunsatAudioCaptureModule : Module() {
       .setDescription("سيستمر التنزيل في الخلفية ويُستأنف تلقائيًا عند عودة الاتصال.")
       .setMimeType("application/zip")
       .setDestinationUri(Uri.fromFile(destination))
-      .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+      .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
       .setAllowedOverMetered(true)
       .setAllowedOverRoaming(false)
 
