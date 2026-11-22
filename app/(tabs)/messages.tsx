@@ -79,7 +79,7 @@ export default function Messages(){
  useFocusEffect(useCallback(()=>{load();},[load]));
  useEffect(()=>{(async()=>{try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(permission.granted){await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);}}catch{setMicReady(false);}})();},[]);
 
- useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);},[]);
+ useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);Speech.stop();try{void recorder.stop().catch(()=>{});}catch{}},[recorder]);
 
  async function loadMoreMessages(){
   if(loadingMore||!hasMoreMessages)return;
@@ -174,7 +174,7 @@ export default function Messages(){
     <Pressable onPress={()=>{if(previewStatus.playing)previewPlayer.pause();else{if(previewStatus.duration>0&&previewStatus.currentTime>=previewStatus.duration)previewPlayer.seekTo(0);previewPlayer.play();}}} style={{backgroundColor:'#E7E9E7',padding:14,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#222'}}>{previewStatus.playing?'إيقاف الاستماع':'استماع إلى التسجيل'}</Text></Pressable>
     <Pressable disabled={busy} onPress={sendRecording} style={{backgroundColor:green,padding:15,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{busy?'جارٍ الإرسال…':'إرسال الرسالة'}</Text></Pressable>
     <Pressable disabled={busy} onPress={cancelRecording} style={{backgroundColor:'#EEE',padding:13,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#555'}}>إلغاء وحذف التسجيل</Text></Pressable>
-   </View>:<><Pressable disabled={busy} onPress={state.isRecording?stop:start} style={{width:78,height:78,borderRadius:39,backgroundColor:state.isRecording?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{state.isRecording?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':state.isRecording?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
+   </View>:<><Pressable disabled={busy} onPress={state.isRecording?stop:()=>start()} style={{width:78,height:78,borderRadius:39,backgroundColor:state.isRecording?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{state.isRecording?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':state.isRecording?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
   </View>
   <View style={{flexDirection:'row-reverse',gap:7,marginTop:28,marginBottom:12}}>{([['all','الكل'],['received','الواردة'],['sent','الصادرة']] as const).map(([key,label])=><Pressable key={key} onPress={()=>setMessageFilter(key)} style={{flex:1,padding:11,borderRadius:10,backgroundColor:messageFilter===key?green:'#F1F2F1'}}><Text style={{textAlign:'center',fontWeight:'700',color:'#26352A'}}>{label}</Text></Pressable>)}</View>
   <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginBottom:12,color:'#111'}}>{friendId?'سجل المحادثة':'سجل الرسائل الصوتية'}</Text>
