@@ -112,7 +112,7 @@ export default function VoiceCommand(){
    <Text style={{textAlign:'right',color:'#526B57',lineHeight:23,marginTop:8}}>عند تشغيل الاستماع سيظهر إشعار دائم لأن منصت يستخدم خدمة صوت أمامية. اسمح باستثناء التطبيق من تحسين البطارية حتى لا يوقف النظام الاستماع عند إطفاء الشاشة. وعلى بعض الهواتف قد تحتاج أيضًا إلى تفعيل التشغيل التلقائي والنشاط في الخلفية من إعدادات البطارية.</Text>
    <Text style={{textAlign:'right',color:backgroundAllowed?'#36764A':'#9A6A24',marginTop:8,fontWeight:'700'}}>{backgroundAllowed?'تم السماح بتجاوز تحسين البطارية.':'لم يُفعّل استثناء تحسين البطارية بعد.'}</Text>
    <Pressable onPress={configureBackground} style={{backgroundColor:GREEN,padding:13,borderRadius:10,marginTop:12}}><Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{backgroundAllowed?'فتح إعدادات التطبيق':'السماح بالعمل في الخلفية'}</Text></Pressable>
-   <Text style={{textAlign:'right',color:'#777',fontSize:11,lineHeight:19,marginTop:8}}>يستمر الاستماع مع إطفاء الشاشة ما دام وضع الأوامر الصوتية نشطًا. أما فرض إيقاف التطبيق من إعدادات النظام فيوقفه.</Text>
+   <Text style={{textAlign:'right',color:'#777',fontSize:11,lineHeight:19,marginTop:8}}>يستمر الاستماع مع إطفاء الشاشة ما دام وضع الأوامر الصوتية نشطًا، وقد يزيد استهلاك البطارية. أما فرض إيقاف التطبيق من إعدادات النظام فيوقفه.</Text>
   </View>
   <View style={{backgroundColor:'#F3F4F3',padding:18,borderRadius:16,marginTop:24}}>
    <Text style={{textAlign:'right',fontWeight:'800',color:'#222'}}>حالة أداة الصوت</Text>
