@@ -1,4 +1,4 @@
-import { EventEmitter, requireNativeModule } from 'expo-modules-core';
+import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 
 type CaptureEvent = {
   text?: string;
@@ -11,6 +11,7 @@ type CaptureEvent = {
 };
 
 type NativeCapture = {
+  addListener(eventName: string, listener: (payload: CaptureEvent) => void): EventSubscription;
   startSession(modelPath: string, idleGrammar: string[], recordingGrammar: string[]): Promise<void>;
   stopSession(): Promise<void>;
   startRecording(): Promise<void>;
@@ -20,10 +21,8 @@ type NativeCapture = {
 };
 
 let native: NativeCapture | null = null;
-let emitter: EventEmitter | null = null;
 try {
   native = requireNativeModule<NativeCapture>('MunsatAudioCapture');
-  emitter = new EventEmitter(native as any);
 } catch {
   // The module is Android-only; leave non-Android imports safe.
 }
@@ -43,6 +42,6 @@ export const isRecording = () => native?.isRecording() ?? false;
 export const addListener = (
   event: 'onCommand' | 'onRecordingStarted' | 'onRecordingStopped' | 'onRecordingCancelled' | 'onCaptureError',
   listener: (payload: CaptureEvent) => void
-) => emitter?.addListener(event, listener) ?? { remove() {} };
+) => native?.addListener(event, listener) ?? { remove() {} };
 
 export type { CaptureEvent };
