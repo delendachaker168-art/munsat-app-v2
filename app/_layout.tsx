@@ -1,10 +1,21 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import * as Speech from 'expo-speech';
+import * as Notifications from 'expo-notifications';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { pruneExpiredVoiceCache } from '../src/lib/local-audio';
+import { registerPushNotifications } from '../src/lib/push-notifications';
 import { supabase } from '../src/lib/supabase';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
+  }),
+});
 
 export default function RootLayout() {
   useEffect(() => {
@@ -14,7 +25,7 @@ export default function RootLayout() {
     return () => clearInterval(interval);
   }, []);
 
-  // Announce only the arrival cue while the app is active; never autoplay audio.
+  // Register this device for background push notifications after sign-in.
   useEffect(() => {
     let active = true;
     let channel: any = null;
@@ -25,7 +36,9 @@ export default function RootLayout() {
         channel = null;
       }
       if (!userId || !active) return;
-      
+
+      void registerPushNotifications(userId);
+
       channel = supabase.channel('incoming-voice-' + userId)
         .on('postgres_changes', {
           event: 'INSERT', schema: 'public', table: 'voice_messages',
@@ -72,6 +85,7 @@ export default function RootLayout() {
       Speech.stop();
     };
   }, []);
+
   return <>
     <StatusBar style="dark" backgroundColor="#FFFFFF" />
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#FFFFFF' } }} />
