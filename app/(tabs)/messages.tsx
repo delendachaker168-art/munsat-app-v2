@@ -66,7 +66,7 @@ export default function Messages(){
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
- function announce(text:string){Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92});}
+ function announce(text:string){return new Promise<void>(resolve=>{Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92,onDone:resolve,onStopped:resolve,onError:()=>resolve()});});}
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name,avatar_key)').eq('owner_id',user.id).order('slot_number');
@@ -112,7 +112,7 @@ export default function Messages(){
    if(insertError){const {data:existing}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(!existing)throw insertError;}
    idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-   setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
+   setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();await announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
   }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
   finally{setBusy(false);}
  }
@@ -124,17 +124,18 @@ export default function Messages(){
   try{
    const permission=await AudioModule.requestRecordingPermissionsAsync();
    if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}
+   await setAudioModeAsync({allowsRecording:false,playsInSilentMode:true});
+   await announce('بدأ التسجيل');
    await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});
    setMicReady(true);setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;
    await recorder.prepareToRecordAsync();
    started.current=Date.now();
    recorder.record();
-   announce('بدأ التسجيل');
    timer.current=setTimeout(async()=>{
     try{
      await recorder.stop();
      pendingDurationRef.current=120000;setPendingDuration(120000);
-     announce('انتهى التسجيل، جارٍ إرسال الرسالة');
+     await announce('انتهى التسجيل، جارٍ إرسال الرسالة');
      await sendRecording();
     }catch(e:any){Alert.alert('تعذر إنهاء التسجيل',e?.message||'حاول مرة أخرى.');}
    },120000);
@@ -150,7 +151,7 @@ export default function Messages(){
     const duration=Math.min(120000,Math.max(1000,Date.now()-started.current));
     pendingDurationRef.current=duration;setPendingDuration(duration);
     previewPlayer.replace(uri);setPendingRecording(true);
-    announce('انتهى التسجيل');
+    await announce('انتهى التسجيل');
    }else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
   }catch(e:any){Alert.alert('تعذر إيقاف التسجيل',e?.message||'حاول مرة أخرى.');}
  }
