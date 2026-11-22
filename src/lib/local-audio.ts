@@ -11,6 +11,17 @@ export async function getCachedVoiceUri(messageId:string):Promise<string|null>{
  try{const info=await FileSystem.getInfoAsync(item.uri);return info.exists?item.uri:null;}catch{return null;}
 }
 
+export async function cacheLocalVoiceMessage(messageId:string,sourceUri:string):Promise<string>{
+ const index=await readIndex();const root=FileSystem.documentDirectory;if(!root)throw new Error('مساحة التخزين المحلية غير متاحة.');
+ const directory=root+'voice-messages/';await FileSystem.makeDirectoryAsync(directory,{intermediates:true}).catch(()=>{});
+ const ext=sourceUri.toLowerCase().endsWith('.3gp')?'3gp':sourceUri.toLowerCase().endsWith('.webm')?'webm':'m4a';
+ const destination=directory+messageId+'.'+ext;
+ await FileSystem.copyAsync({from:sourceUri,to:destination});
+ index[messageId]={uri:destination,downloadedAt:Date.now()};
+ await AsyncStorage.setItem(CACHE_KEY,JSON.stringify(index));
+ return destination;
+}
+
 export async function cacheVoiceMessage(messageId:string,signedUrl:string,extension='m4a'):Promise<string>{
  const index=await readIndex();const cached=index[messageId];
  if(cached){try{const info=await FileSystem.getInfoAsync(cached.uri);if(info.exists)return cached.uri;}catch{}}

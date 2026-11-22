@@ -1,131 +1,85 @@
-import { useEffect,useRef,useState } from 'react';
-import { Alert, AppState, PermissionsAndroid, Platform, Pressable, ScrollView, Text, View, type DimensionValue } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useEffect,useRef,useState} from 'react';
+import {Alert,PermissionsAndroid,Platform,Pressable,ScrollView,Text,View} from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
-import { router } from 'expo-router';
 import * as Vosk from 'react-native-vosk';
-import { subscribe,unzip } from 'react-native-zip-archive';
-import { AudioModule } from 'expo-audio';
-import MunsatForegroundService from '../modules/munsat-foreground-service/src';
+import {subscribe,unzip} from 'react-native-zip-archive';
+import {AudioModule} from 'expo-audio';
+import {router} from 'expo-router';
 
 const MODEL_URL='https://alphacephei.com/vosk/models/vosk-model-small-ar-tn-0.1-linto.zip';
-const MODEL_NAME='model-ar-tn';
 const ROOT=(FileSystem.documentDirectory||'')+'vosk/';
-const ZIP_PATH=ROOT+'arabic-model.zip';
-const MODEL_PATH=ROOT+MODEL_NAME;
-const RESUME_KEY='munsat:vosk-download:v1';
-const EXPECTED_BYTES=158*1024*1024;
+const ZIP=ROOT+'arabic-model.zip';
+const MODEL=ROOT+'model-ar-tn';
+const GRAMMAR=['محادثة واحد','محادثة 1','محادثة الأولى','محادثة الاولى','محادثة اثنين','محادثة اثنان','محادثة 2','محادثة الثانية','محادثة ثلاثة','محادثة ثلاثه','محادثة 3','محادثة الثالثة','محادثة أربعة','محادثة اربعة','محادثة 4','محادثة الرابعة','محادثة خمسة','محادثة 5','محادثة الخامسة','[unk]'];
 const GREEN='#8BC99A';
-const GRAMMAR=['محادثة واحد','محادثة 1','محادثة الأولى','محادثة الاولى','محادثة اثنين','محادثة اثنان','محادثة 2','محادثة الثانية','محادثة اثنين','محادثة ثلاثة','محادثة ثلاثه','محادثة 3','محادثة الثالثة','محادثة أربعة','محادثة اربعة','محادثة 4','محادثة الرابعة','محادثة خمسة','محادثة 5','محادثة الخامسة','[unk]'];
-
-function normalize(text:string){return text.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
-function resultText(value:any):string{if(typeof value==='string')return value;if(value&&typeof value.text==='string')return value.text;if(value&&typeof value.result==='string')return value.result;return '';}
-function parseSlot(value:string):number|null{const t=normalize(value);const patterns:[number,RegExp][]=[[1,/(محادثه|محادثة) (واحد|1|الاولى)/],[2,/(محادثه|محادثة) (اثنين|اثنان|2|الثانيه|الثانية)/],[3,/(محادثه|محادثة) (ثلاثه|ثلاثة|3|الثالثه|الثالثة)/],[4,/(محادثه|محادثة) (اربعه|اربعة|أربعة|4|الرابعه|الرابعة)/],[5,/(محادثه|محادثة) (خمسه|خمسة|5|الخامسه|الخامسة)/]];for(const [n,re] of patterns)if(re.test(t))return n;return null;}
-function formatBytes(n:number){if(n<1024*1024)return Math.round(n/1024)+' KB';return (n/1024/1024).toFixed(1)+' MB';}
-function formatTime(seconds:number){if(!Number.isFinite(seconds)||seconds<0)return '—';const m=Math.floor(seconds/60);const s=Math.floor(seconds%60);return m?m+' د '+s+' ث':s+' ث';}
-
+function normalize(s:string){return s.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
+function slotFrom(s:string){const t=normalize(s);const tests:[number,RegExp][]=[[1,/(محادثه|محادثة) (واحد|1|الاولى)/],[2,/(محادثه|محادثة) (اثنين|اثنان|2|الثانيه|الثانية)/],[3,/(محادثه|محادثة) (ثلاثه|ثلاثة|3|الثالثه|الثالثة)/],[4,/(محادثه|محادثة) (اربعه|اربعة|4|الرابعه|الرابعة)/],[5,/(محادثه|محادثة) (خمسه|خمسة|5|الخامسه|الخامسة)/]];return tests.find(([,re])=>re.test(t))?.[0]||null;}
+function textOf(v:any){return typeof v==='string'?v:typeof v?.text==='string'?v.text:typeof v?.result==='string'?v.result:'';}
 export default function VoiceCommand(){
- const [modelReady,setModelReady]=useState(false);const [downloading,setDownloading]=useState(false);const [extracting,setExtracting]=useState(false);const [loadingModel,setLoadingModel]=useState(false);const [listening,setListening]=useState(false);
- const [progress,setProgress]=useState(0);const [resumeAvailable,setResumeAvailable]=useState(false);const [speed,setSpeed]=useState(0);const [eta,setEta]=useState(0);const [partial,setPartial]=useState('');const [recognized,setRecognized]=useState('');const [pendingSlot,setPendingSlot]=useState<number|null>(null);const [status,setStatus]=useState('النموذج العربي غير مثبت بعد.');
- const downloadRef=useRef<any>(null);const pauseRequestedRef=useRef(false);const voskRef=useRef<any>(null);const modelLoadedRef=useRef(false);const listenersRef=useRef<any[]>([]);const handledRef=useRef(false);const progressRef=useRef({bytes:0,time:Date.now()});
-
- useEffect(()=>{(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});setResumeAvailable(Boolean(await AsyncStorage.getItem(RESUME_KEY)));const info=await FileSystem.getInfoAsync(MODEL_PATH);if(info.exists){const entries=await FileSystem.readDirectoryAsync(MODEL_PATH);if(entries.includes('am')&&entries.includes('conf')){setModelReady(true);setStatus('النموذج العربي جاهز على الجهاز.');}else{await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});}}}catch{}})();return()=>{try{voskRef.current?.stop();voskRef.current?.unload();MunsatForegroundService.stop();modelLoadedRef.current=false;}catch{}listenersRef.current.forEach(x=>x?.remove?.());};},[]);
- useEffect(()=>{const sub=AppState.addEventListener('change',state=>{if(state!=='active'&&downloadRef.current){pauseDownload().catch(()=>{});}});return()=>sub.remove();},[]);
-
- async function pauseDownload(){
-  const task=downloadRef.current;if(!task)return;
-  try{
-   pauseRequestedRef.current=true;await task.pauseAsync();
-   const saved=task.savable?.();
-   if(saved){await AsyncStorage.setItem(RESUME_KEY,JSON.stringify(saved));setResumeAvailable(true);}
-   else{await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});await AsyncStorage.removeItem(RESUME_KEY);setResumeAvailable(false);}
-   downloadRef.current=null;setDownloading(false);setStatus('توقف التنزيل مؤقتًا؛ يمكنك استكماله لاحقًا.');
-  }catch{pauseRequestedRef.current=false;setStatus('تعذر إيقاف التنزيل مؤقتًا؛ سيستمر ما دام التطبيق مفتوحًا.');}
- }
+ const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[listening,setListening]=useState(false),[progress,setProgress]=useState(0),[status,setStatus]=useState('جارٍ فحص أداة التعرف الصوتي…'),[heard,setHeard]=useState('');
+ const listeners=useRef<any[]>([]),loaded=useRef(false),handled=useRef(false),mounted=useRef(true);
+ useEffect(()=>{mounted.current=true;(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL);if(info.exists){const files=await FileSystem.readDirectoryAsync(MODEL);if(files.includes('am')&&files.includes('conf')){setReady(true);setStatus('أداة التعرف الصوتي مثبتة. اضغط بدء الاستماع.');return;}}setStatus('أداة التعرف الصوتي غير مثبتة. نزّلها مرة واحدة لتعمل الأوامر دون إنترنت.');}catch(e:any){setStatus('تعذر فحص ملفات التعرف الصوتي: '+(e?.message||''));}})();return()=>{mounted.current=false;try{Vosk.stop();if(loaded.current)Vosk.unload();}catch{}listeners.current.forEach(x=>x?.remove?.());};},[]);
+ function clearListeners(){listeners.current.forEach(x=>x?.remove?.());listeners.current=[];}
  async function downloadModel(){
-  if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي المحلي مضبوط حاليًا لأجهزة Android.');return;}
-  let safeToCleanZip=false;
-  setDownloading(true);setStatus('جارٍ تنزيل النموذج العربي…');progressRef.current={bytes:0,time:Date.now()};
+  if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي متاح حاليًا على Android فقط.');return;}
+  setBusy(true);setProgress(0);setStatus('جارٍ تنزيل أداة التعرف الصوتي العربية (نحو 158 ميغابايت)…');
   try{
-   await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});
-   const freeSpace=await FileSystem.getFreeDiskStorageAsync();if(freeSpace<350*1024*1024)throw new Error('تحتاج إلى توفير مساحة خالية لا تقل عن 350 ميجابايت قبل تثبيت النموذج.');safeToCleanZip=true;
-   const savedRaw=await AsyncStorage.getItem(RESUME_KEY);const saved=savedRaw?JSON.parse(savedRaw):null;
-   if(saved?.resumeData){const partial=await FileSystem.getInfoAsync(ZIP_PATH);const written=partial.exists?(partial.size||0):0;progressRef.current={bytes:written,time:Date.now()};setProgress(Math.min(100,written/EXPECTED_BYTES*100));}
-   const existingZip=await FileSystem.getInfoAsync(ZIP_PATH);
-   const zipAlreadyDownloaded=existingZip.exists&&(existingZip.size||0)>1024*1024&&!saved?.resumeData;
-   if(!zipAlreadyDownloaded){
-    const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP_PATH,{},(event)=>{
-     const total=event.totalBytesExpectedToWrite>0?event.totalBytesExpectedToWrite:EXPECTED_BYTES;
-     const now=Date.now();const delta=event.totalBytesWritten-progressRef.current.bytes;const elapsed=Math.max(.25,(now-progressRef.current.time)/1000);
-     if(delta>=0){setSpeed(delta/elapsed);setEta((total-event.totalBytesWritten)/Math.max(1,delta/elapsed));}
-     progressRef.current={bytes:event.totalBytesWritten,time:now};setProgress(Math.min(100,event.totalBytesWritten/total*100));
-    },saved?.resumeData);
-    downloadRef.current=task;
-    const result=saved?.resumeData?await task.resumeAsync():await task.downloadAsync();
-    if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}
-    if(!result||result.status<200||result.status>=300)throw new Error('لم يكتمل تنزيل ملف النموذج.');
-   }
-   downloadRef.current=null;setDownloading(false);
-   await AsyncStorage.removeItem(RESUME_KEY);setResumeAvailable(false);setProgress(100);setStatus('اكتمل التنزيل؛ جارٍ فحص الملف وفك الضغط…');setExtracting(true);
-   const zipInfo=await FileSystem.getInfoAsync(ZIP_PATH);if(!zipInfo.exists||(zipInfo.size||0)<1024*1024)throw new Error('ملف النموذج غير مكتمل.');
-   const output=ROOT+'unpacked';await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.makeDirectoryAsync(output,{intermediates:true});
-   const subscription=subscribe(({progress:fileProgress})=>setProgress(Math.min(100,fileProgress*100)));
-   try{await unzip(ZIP_PATH,output);setProgress(100);}finally{subscription.remove();}
-   const entries=await FileSystem.readDirectoryAsync(output);const extracted=entries.find(x=>x.startsWith('vosk-model-'));
-   if(!extracted)throw new Error('لم نعثر على مجلد النموذج بعد فك الضغط.');
-   await FileSystem.deleteAsync(MODEL_PATH,{idempotent:true}).catch(()=>{});
-   await FileSystem.moveAsync({from:output+'/'+extracted,to:MODEL_PATH});
-   await FileSystem.deleteAsync(output,{idempotent:true}).catch(()=>{});await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});
-   const check=await FileSystem.getInfoAsync(MODEL_PATH);if(!check.exists)throw new Error('فشل التحقق من تثبيت النموذج.');
-   setModelReady(true);setStatus('النموذج مثبت وجاهز للتعرف دون إنترنت.');
-  }catch(e:any){setDownloading(false);if(pauseRequestedRef.current){pauseRequestedRef.current=false;return;}if(safeToCleanZip){await FileSystem.deleteAsync(ZIP_PATH,{idempotent:true}).catch(()=>{});await AsyncStorage.removeItem(RESUME_KEY).catch(()=>{});setResumeAvailable(false);}setStatus('تعذر إكمال التنزيل أو التثبيت. يمكنك المحاولة أو الاستكمال.');Alert.alert('تعذر تثبيت النموذج',e?.message||'تحقق من اتصال الإنترنت والمساحة المتاحة.');}
-  finally{setExtracting(false);}
+   const free=await FileSystem.getFreeDiskStorageAsync();if(free<350*1024*1024)throw new Error('وفّر مساحة خالية لا تقل عن 350 ميغابايت.');
+   await FileSystem.deleteAsync(ZIP,{idempotent:true});
+   const task=FileSystem.createDownloadResumable(MODEL_URL,ZIP,{},e=>{if(e.totalBytesExpectedToWrite>0&&mounted.current)setProgress(Math.round(e.totalBytesWritten/e.totalBytesExpectedToWrite*100));});
+   const result=await task.downloadAsync();if(!result||result.status<200||result.status>=300)throw new Error('فشل تنزيل ملف النموذج.');
+   setStatus('اكتمل التنزيل؛ جارٍ تثبيت ملفات اللغة…');
+   const out=ROOT+'unpacked';await FileSystem.deleteAsync(out,{idempotent:true});await FileSystem.makeDirectoryAsync(out,{intermediates:true});
+   const sub=subscribe(({progress:p})=>{if(mounted.current)setProgress(Math.round(p*100));});
+   try{await unzip(ZIP,out);}finally{sub.remove();}
+   const dirs=await FileSystem.readDirectoryAsync(out);const folder=dirs.find(x=>x.startsWith('vosk-model-'));if(!folder)throw new Error('ملفات النموذج غير مكتملة.');
+   await FileSystem.deleteAsync(MODEL,{idempotent:true});await FileSystem.moveAsync({from:out+'/'+folder,to:MODEL});
+   await FileSystem.deleteAsync(out,{idempotent:true});await FileSystem.deleteAsync(ZIP,{idempotent:true});
+   const check=await FileSystem.readDirectoryAsync(MODEL);if(!check.includes('am')||!check.includes('conf'))throw new Error('لم يكتمل تثبيت النموذج العربي.');
+   setReady(true);setStatus('تم تثبيت أداة التعرف الصوتي. يمكنك بدء الاستماع الآن.');
+  }catch(e:any){setStatus('فشل تنزيل أو تثبيت أداة الصوت.');Alert.alert('تعذر تثبيت أداة الصوت',e?.message||'تحقق من الإنترنت ومساحة الهاتف.');}
+  finally{setBusy(false);}
  }
-
- function removeListeners(){listenersRef.current.forEach(x=>x?.remove?.());listenersRef.current=[];}
  async function startListening(){
-  if(!modelReady){Alert.alert('النموذج غير مثبت','نزّل النموذج العربي أولًا.');return;}
+  if(!ready)return;
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف المحلي متاح حاليًا على Android.');return;}
-  const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}
-  let foregroundEnabled=true;
-  if(Platform.Version>=33){const notificationPermission=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);foregroundEnabled=notificationPermission===PermissionsAndroid.RESULTS.GRANTED;}
-  setLoadingModel(true);setStatus('جارٍ تحميل النموذج في الذاكرة…');
   try{
-   if(!voskRef.current)voskRef.current=Vosk;
-   if(!modelLoadedRef.current){const nativeModelPath=MODEL_PATH.startsWith('file://')?MODEL_PATH.replace('file://',''):MODEL_PATH;await voskRef.current.loadModel(nativeModelPath);modelLoadedRef.current=true;}
-   removeListeners();handledRef.current=false;setRecognized('');setPartial('');setPendingSlot(null);
-   listenersRef.current.push(voskRef.current.onPartialResult((value:any)=>setPartial(resultText(value))));
-   listenersRef.current.push(voskRef.current.onResult((value:any)=>{
-    if(handledRef.current)return;handledRef.current=true;const text=resultText(value);setRecognized(text);setPartial('');voskRef.current?.stop();MunsatForegroundService.stop();setListening(false);try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}
-    const slot=parseSlot(text);if(slot){setStatus('تم التعرف على الخانة '+slot+'؛ جارٍ فتحها وبدء التسجيل.');router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});}else setStatus('لم أفهم الأمر بوضوح. قل: محادثة واحد إلى محادثة خمسة.');
+   const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted)throw new Error('اسمح لمنصت باستخدام الميكروفون.');
+   if(Platform.Version>=33){const n=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);if(n!==PermissionsAndroid.RESULTS.GRANTED)setStatus('يمكنك الاستماع أثناء فتح التطبيق؛ الإشعار غير مفعّل.');}
+   setBusy(true);setStatus('جارٍ تشغيل التعرف الصوتي…');
+   if(!loaded.current){const path=MODEL.startsWith('file://')?MODEL.slice(7):MODEL;await Vosk.loadModel(path);loaded.current=true;}
+   clearListeners();handled.current=false;setHeard('');
+   listeners.current.push(Vosk.onPartialResult((v:any)=>{if(mounted.current)setHeard(textOf(v));}));
+   listeners.current.push(Vosk.onResult((v:any)=>{
+    if(handled.current)return;handled.current=true;
+    const recognized=textOf(v);if(mounted.current)setHeard(recognized);
+    try{Vosk.stop();}catch{}setListening(false);clearListeners();
+    const slot=slotFrom(recognized);
+    if(slot){setStatus('تم التعرف على الخانة '+slot+'، جارٍ فتح المحادثة وبدء التسجيل.');try{Vosk.unload();}catch{}loaded.current=false;router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});}
+    else{setStatus('لم أفهم الأمر. قل: محادثة واحد، اثنين، ثلاثة، أربعة، أو خمسة.');}
    }));
-   listenersRef.current.push(voskRef.current.onError((error:any)=>{setStatus('تعذر تشغيل التعرف الصوتي.');MunsatForegroundService.stop();setListening(false);Alert.alert('خطأ في التعرف',String(error));}));
-   if(foregroundEnabled){try{foregroundEnabled=MunsatForegroundService.start();}catch{foregroundEnabled=false;}}
-   await voskRef.current.start({grammar:GRAMMAR});setListening(true);setStatus(foregroundEnabled?'أستمع الآن؛ قل: محادثة واحد إلى خمسة لبدء التسجيل.':'أستمع أثناء فتح التطبيق. اسمح بالإشعارات لتفعيل الاستماع في الخلفية.'); 
-  }catch(e:any){MunsatForegroundService.stop();setListening(false);setStatus('تعذر تحميل النموذج.');Alert.alert('تعذر تشغيل النموذج',e?.message||'أعد المحاولة.');}
-  finally{setLoadingModel(false);}
+   listeners.current.push(Vosk.onError((e:any)=>{setListening(false);setStatus('حدث خطأ أثناء التعرف الصوتي.');Alert.alert('خطأ في التعرف الصوتي',String(e));}));
+   await Vosk.start({grammar:GRAMMAR});setListening(true);setStatus('أستمع الآن. قل: محادثة واحد إلى محادثة خمسة.');
+  }catch(e:any){setListening(false);setStatus('تعذر تشغيل التعرف الصوتي.');Alert.alert('تعذر تشغيل الصوت',e?.message||'أعد المحاولة.');}
+  finally{setBusy(false);}
  }
- function stopListening(){try{voskRef.current?.stop();MunsatForegroundService.stop();}catch{}setListening(false);setStatus('توقف الاستماع.');}
- async function confirmCommand(){
-  if(!pendingSlot)return;const slot=pendingSlot;stopListening();removeListeners();try{voskRef.current?.unload();modelLoadedRef.current=false;}catch{}setPendingSlot(null);
-  router.push({pathname:'/(tabs)/messages',params:{slot:String(slot),autoRecord:'1',autoToken:String(Date.now())}});
- }
- const downloadLabel=downloading?'إيقاف مؤقت':modelReady?'النموذج مثبت':resumeAvailable?'استكمال التنزيل':'تنزيل النموذج العربي';
+ function stopListening(){try{Vosk.stop();}catch{}clearListeners();setListening(false);setStatus('توقف الاستماع.');}
+ async function mainAction(){if(listening){stopListening();return;}if(!ready){await downloadModel();return;}await startListening();}
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
-  <View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الأوامر الصوتية</Text><Pressable onPress={()=>router.back()}><Text style={{color:'#4F9864'}}>رجوع</Text></Pressable></View>
-  <Text style={{textAlign:'right',color:'#777',lineHeight:25,marginTop:8}}>تحكم في خاناتك بصوتك. تتم معالجة الكلام محليًا على الجهاز دون إرساله إلى خادم.</Text>
-  <View style={{backgroundColor:'#F3F4F3',borderRadius:16,padding:18,marginTop:22}}>
-   <Text style={{textAlign:'right',fontWeight:'800',fontSize:17,color:'#222'}}>النموذج العربي المحلي</Text>
-   <Text style={{textAlign:'right',color:'#666',lineHeight:23,marginTop:8}}>حجم التنزيل نحو 158 ميجابايت، ويُفضّل توفير 350 ميجابايت على الأقل لفك الضغط. بعد تثبيته يعمل التعرف دون إنترنت.</Text>
-   <Text style={{textAlign:'right',color:'#4F9864',fontWeight:'700',marginTop:12}}>{status}</Text>
-   {downloading||extracting?<><View style={{height:9,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:14}}><View style={{height:9,width:(Math.min(100,progress)+'%') as DimensionValue,backgroundColor:GREEN}}/></View><Text style={{textAlign:'right',color:'#555',marginTop:8}}>{downloading?Math.min(100,progress).toFixed(1)+'% · '+formatBytes(progress/100*EXPECTED_BYTES):'جارٍ فك الضغط…'}</Text>{downloading?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:5}}>السرعة: {formatBytes(speed)}/ث · المتبقي: {formatTime(eta)}</Text>:null}</>:null}
-   {downloading?<Pressable onPress={()=>pauseDownload()} style={secondaryButton}><Text style={buttonText}>إيقاف مؤقت</Text></Pressable>:!modelReady?<Pressable disabled={extracting} onPress={downloadModel} style={primaryButton}><Text style={buttonText}>{extracting?'جارٍ التثبيت…':downloadLabel}</Text></Pressable>:<View style={{backgroundColor:'#E5F3E8',padding:13,borderRadius:10,marginTop:15}}><Text style={{textAlign:'center',color:'#356B43',fontWeight:'700'}}>✓ النموذج جاهز على جهازك</Text></View>}
-   {modelReady?<Pressable disabled={loadingModel||downloading||extracting} onPress={listening?stopListening:startListening} style={[primaryButton,{backgroundColor:listening?'#D96B6B':GREEN}]}><Text style={buttonText}>{loadingModel?'جارٍ التحميل…':listening?'إيقاف الاستماع':'ابدأ الاستماع للأوامر'}</Text></Pressable>:null}
+  <Text style={{fontSize:27,fontWeight:'800',textAlign:'right',color:'#111'}}>إرسال الرسائل بواسطة التعرف الصوتي</Text>
+  <Text style={{textAlign:'right',color:'#777',lineHeight:25,marginTop:10}}>اضغط الزر لبدء التعرف على الأوامر. إذا كانت أداة الصوت غير مثبتة فسيظهر لك تنزيلها أولًا، وبعد تثبيتها يمكنك تشغيل الأوامر مباشرة.</Text>
+  <View style={{backgroundColor:'#F3F4F3',padding:18,borderRadius:16,marginTop:24}}>
+   <Text style={{textAlign:'right',fontWeight:'800',color:'#222'}}>حالة أداة الصوت</Text>
+   <Text style={{textAlign:'right',color:'#4F9864',lineHeight:24,marginTop:10}}>{status}</Text>
+   {!ready&&!busy?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:8}}>التنزيل الأول نحو 158 ميغابايت، وبعده يعمل التعرف دون إنترنت.</Text>:null}
+   {busy?<View style={{height:8,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:16}}><View style={{height:8,width:(progress+'%') as any,backgroundColor:GREEN}}/></View>:null}
+   <Pressable disabled={busy} onPress={mainAction} style={{backgroundColor:listening?'#D96B6B':GREEN,padding:16,borderRadius:12,marginTop:18,opacity:busy?.6:1}}>
+    <Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{busy?'جارٍ التجهيز…':listening?'إيقاف التعرف الصوتي':ready?'ابدأ التعرف على الأوامر':'تنزيل أداة التعرف الصوتي'}</Text>
+   </Pressable>
+   {ready&&!listening&&!busy?<Pressable onPress={startListening} style={{backgroundColor:'#E5F0E7',padding:13,borderRadius:10,marginTop:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#315B3B'}}>بدء الاستماع الآن</Text></Pressable>:null}
   </View>
-  {listening?<View style={{backgroundColor:'#EAF5EC',padding:16,borderRadius:14,marginTop:16}}><Text style={{textAlign:'center',fontWeight:'800',color:'#356B43'}}>● الاستماع نشط</Text><Text style={{textAlign:'center',color:'#555',marginTop:8}}>{partial||'قل: محادثة واحد، اثنين، ثلاثة، أربعة، أو خمسة.'}</Text></View>:null}
-  {recognized?<View style={{backgroundColor:'#F3F4F3',padding:16,borderRadius:14,marginTop:16}}><Text style={{textAlign:'right',fontWeight:'700',color:'#333'}}>ما تم التعرف عليه: {recognized}</Text></View>:null}
-  {pendingSlot?<View style={{backgroundColor:'#EAF5EC',padding:18,borderRadius:14,marginTop:16}}><Text style={{textAlign:'right',fontWeight:'800',fontSize:18,color:'#222'}}>هل تريد بدء محادثة الخانة {pendingSlot}؟</Text><Text style={{textAlign:'right',color:'#666',marginTop:7}}>لن يبدأ التسجيل إلا بعد تأكيدك.</Text><Pressable onPress={confirmCommand} style={primaryButton}><Text style={buttonText}>تأكيد وبدء التسجيل</Text></Pressable><Pressable onPress={()=>{setPendingSlot(null);setRecognized('');}} style={secondaryButton}><Text style={buttonText}>إلغاء</Text></Pressable></View>:null}
-  <Text style={{textAlign:'right',color:'#999',fontSize:12,marginTop:24,lineHeight:20}}>النموذج العربي المستخدم إصدار تونسي من Vosk. قد تختلف دقة فهم اللهجة الجزائرية، لذلك يعرض التطبيق الأمر للتأكيد قبل بدء التسجيل.</Text>
+  {listening?<View style={{backgroundColor:'#EAF5EC',padding:17,borderRadius:14,marginTop:16}}><Text style={{textAlign:'center',fontWeight:'800',color:'#356B43'}}>● الاستماع نشط</Text><Text style={{textAlign:'center',color:'#555',marginTop:9}}>{heard||'قل: محادثة واحد، اثنين، ثلاثة، أربعة، أو خمسة.'}</Text></View>:null}
+  <Text style={{textAlign:'right',color:'#888',fontSize:12,lineHeight:21,marginTop:22}}>عند قول «محادثة واحد» إلى «محادثة خمسة» يفتح التطبيق خانة الصديق ويبدأ التسجيل تلقائيًا. يجب تخصيص صديق للخانة أولًا.</Text>
+  <Pressable onPress={()=>router.back()} style={{padding:14,marginTop:16}}><Text style={{textAlign:'center',color:'#4F9864',fontWeight:'700'}}>رجوع</Text></Pressable>
  </ScrollView>;
 }
-const primaryButton={backgroundColor:GREEN,padding:15,borderRadius:11,marginTop:15};const secondaryButton={backgroundColor:'#E6E8E6',padding:13,borderRadius:11,marginTop:10};const buttonText={textAlign:'center' as const,fontWeight:'800' as const,color:'#17351E'};

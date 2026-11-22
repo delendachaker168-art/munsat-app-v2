@@ -5,7 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import * as Speech from 'expo-speech';
 import { supabase } from '../../src/lib/supabase';
-import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
+import { cacheLocalVoiceMessage, cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
 type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; downloaded_at:string|null; deleted_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
@@ -21,24 +21,18 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
   try{
    if(loadedMessageId!==message.id){
     let uri:string;
-    if(message.deleted_at){
-     const cached=await getCachedVoiceUri(message.id);
-     if(!cached)throw new Error('انتهت مدة التخزين السحابي ولم تحفظ نسخة محلية على هذا الجهاز.');
-     uri=cached;setHasLocalCopy(true);
-    }else if(message.recipient_id===currentUserId){
-     const cached=await getCachedVoiceUri(message.id);
-     if(cached){uri=cached;if(!message.downloaded_at)await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);}
-     else{
-      const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,3600);
-      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
-      uri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
-      setHasLocalCopy(true);
-      await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
-     }
+    const cached=await getCachedVoiceUri(message.id);
+    if(cached){uri=cached;setHasLocalCopy(true);}
+    else if(message.deleted_at){
+     throw new Error('انتهت مدة التخزين السحابي ولم توجد نسخة محلية محفوظة على هذا الجهاز.');
     }else{
      const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(message.storage_key,3600);
      if(error||!data?.signedUrl)throw error||new Error('تعذر إنشاء رابط الاستماع.');
-     uri=data.signedUrl;
+     if(message.recipient_id===currentUserId){
+      uri=await cacheVoiceMessage(message.id,data.signedUrl,message.storage_key.split('.').pop()||'m4a');
+      setHasLocalCopy(true);
+      await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',message.id);
+     }else uri=data.signedUrl;
     }
     player.replace(uri);setLoadedMessageId(message.id);player.play();
     if(message.recipient_id===currentUserId){const at=new Date().toISOString();await supabase.from('voice_messages').update({listened_at:at}).eq('id',message.id);onListened(message.id,at);}
@@ -110,8 +104,11 @@ export default function Messages(){
    const key=idempotencyKey+extension;
    const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:true});if(uploadError)throw uploadError;
    const duration=Math.min(120000,Math.max(1000,pendingDurationRef.current||Date.now()-started.current));
-   const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:recipientId,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey});
-   if(insertError){const {data:existing}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(!existing)throw insertError;}
+   const {data:inserted,error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:recipientId,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey}).select('id').single();
+   let messageId=inserted?.id as string|undefined;
+   if(insertError){const {data:existing,error:lookupError}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(lookupError||!existing)throw insertError;messageId=existing.id;}
+   if(!messageId)throw new Error('تم رفع الملف لكن تعذر حفظ سجل الرسالة.');
+   await cacheLocalVoiceMessage(messageId,uri);
    idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
    setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();await announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
