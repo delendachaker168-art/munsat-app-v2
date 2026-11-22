@@ -1,20 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocalSearchParams,useFocusEffect } from 'expo-router';
+import { router,useLocalSearchParams,useFocusEffect } from 'expo-router';
 import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import * as Speech from 'expo-speech';
 import { supabase } from '../../src/lib/supabase';
 import { cacheVoiceMessage, getCachedVoiceUri } from '../../src/lib/local-audio';
-import Vosk from 'react-native-vosk';
-import MunsatForegroundService from '../../modules/munsat-foreground-service/src';
 
 type Slot = { slot_number:number; friend_id:string|null; friend:{id:string;display_name:string|null;avatar_key:string|null}|null };
 type Message = { id:string; sender_id:string; recipient_id:string; slot_number:number; duration_ms:number; created_at:string; storage_key:string; listened_at:string|null; downloaded_at:string|null; deleted_at:string|null; sender?:{display_name:string|null;avatar_key:string|null}; recipient?:{display_name:string|null;avatar_key:string|null} };
 const green='#8BC99A';
-const VOSK_MODEL_PATH=(FileSystem.documentDirectory||'')+'vosk/model-ar-tn';
-const CLOSE_GRAMMAR=['أغلق','اغلق','إغلاق','اغلاق','[unk]'];
-function normalizeVoiceCommand(value:string){return value.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[.,،؛!?؟]/g,' ').replace(/\s+/g,' ').trim();}
-function voiceResultText(value:any):string{return typeof value==='string'?value:typeof value?.text==='string'?value.text:typeof value?.result==='string'?value.result:'';}
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
 function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void}){
@@ -64,70 +59,27 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
 }
 
 export default function Messages(){
- const params=useLocalSearchParams<{slot?:string;autoRecord?:string;autoToken?:string}>();
+ const params=useLocalSearchParams<{slot?:string;friendId?:string;autoRecord?:string;autoToken?:string}>();
+ const friendId=typeof params.friendId==='string'?params.friendId:null;
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
- const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
- const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);
- const closeVoskRef=useRef<any>(null);const closeListenersRef=useRef<any[]>([]);const closeHandledRef=useRef(false);const closingByVoiceRef=useRef(false);const closeListeningRef=useRef(false);
+ const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
+ const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
+ function announce(text:string){Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92});}
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name,avatar_key)').eq('owner_id',user.id).order('slot_number');
   if(error){Alert.alert('تعذر تحميل الخانات',error.message);return;}
   if(!slotData?.length){await supabase.from('voice_slots').upsert([1,2,3,4,5].map(slot_number=>({owner_id:user.id,slot_number,friend_id:null})),{onConflict:'owner_id,slot_number'});setSlots([1,2,3,4,5].map(slot_number=>({slot_number,friend_id:null,friend:null})));}
   else setSlots(slotData as unknown as Slot[]);
-  const {data:msg}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(0,19);
+  const {data:msg}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or(friendId?'and(sender_id.eq.'+user.id+',recipient_id.eq.'+friendId+'),and(sender_id.eq.'+friendId+',recipient_id.eq.'+user.id+')':'sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(0,19);
   setMessages((msg||[]) as Message[]);setMessageOffset(20);setHasMoreMessages((msg||[]).length===20);
- },[]);
+ },[friendId]);
  useFocusEffect(useCallback(()=>{load();},[load]));
  useEffect(()=>{(async()=>{try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(permission.granted){await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);}}catch{setMicReady(false);}})();},[]);
 
- useEffect(()=>()=>{try{closeListenersRef.current.forEach(x=>x?.remove?.());closeListenersRef.current=[];closeVoskRef.current?.stop();closeVoskRef.current?.unload();MunsatForegroundService.stop();}catch{}},[]);
- function stopCloseCommandListener(){
-  closeListenersRef.current.forEach(x=>x?.remove?.());closeListenersRef.current=[];
-  try{closeVoskRef.current?.stop();MunsatForegroundService.stop();}catch{}
-  closeListeningRef.current=false;
- }
- async function startCloseCommandListener(){
-  try{
-   const model=await FileSystem.getInfoAsync(VOSK_MODEL_PATH);
-   if(!model.exists){return;}
-   if(!closeVoskRef.current)closeVoskRef.current=new Vosk();
-   if(!closeVoskRef.current.__munsatLoaded){
-    const nativePath=VOSK_MODEL_PATH.startsWith('file://')?VOSK_MODEL_PATH.replace('file://',''):VOSK_MODEL_PATH;
-    await closeVoskRef.current.loadModel(nativePath);closeVoskRef.current.__munsatLoaded=true;
-   }
-   closeListenersRef.current.forEach(x=>x?.remove?.());closeListenersRef.current=[];
-   closeHandledRef.current=false;
-   closeListenersRef.current.push(closeVoskRef.current.onResult((value:any)=>{
-    if(closeHandledRef.current||!closeListeningRef.current)return;
-    const spoken=normalizeVoiceCommand(voiceResultText(value));
-    if(spoken.includes('اغلق')||spoken.includes('اغلاق')){
-     closeHandledRef.current=true;stopCloseCommandListener();void stopAndSendByVoice();
-    }
-   }));
-   closeListenersRef.current.push(closeVoskRef.current.onError(()=>{stopCloseCommandListener();}));
-   await closeVoskRef.current.start({grammar:CLOSE_GRAMMAR});
-   closeListeningRef.current=true;
-  }catch{
-   stopCloseCommandListener();
-  }
- }
- async function stopAndSendByVoice(){
-  if(closingByVoiceRef.current)return;
-  closingByVoiceRef.current=true;
-  if(timer.current)clearTimeout(timer.current);
-  try{
-   stopCloseCommandListener();
-   await recorder.stop();
-   const duration=Math.min(120000,Math.max(1000,Date.now()-started.current));
-   pendingDurationRef.current=duration;setPendingDuration(duration);setPendingRecording(true);
-   await sendRecording();
-  }catch(e:any){
-   Alert.alert('تعذر إنهاء التسجيل',e?.message||'يمكنك إيقاف التسجيل يدويًا.');
-  }finally{closingByVoiceRef.current=false;}
- }
+ useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);},[]);
 
  async function loadMoreMessages(){
   if(loadingMore||!hasMoreMessages)return;
@@ -135,7 +87,7 @@ export default function Messages(){
   try{
    const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;
    const from=messageOffset;
-   const {data,error}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or('sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+19);
+   const {data,error}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or(friendId?'and(sender_id.eq.'+user.id+',recipient_id.eq.'+friendId+'),and(sender_id.eq.'+friendId+',recipient_id.eq.'+user.id+')':'sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+19);
    if(error)throw error;
    const page=(data||[]) as Message[];
    setMessages(current=>{const seen=new Set(current.map(item=>item.id));return [...current,...page.filter(item=>!seen.has(item.id))];});
@@ -165,24 +117,56 @@ export default function Messages(){
   finally{setBusy(false);}
  }
  async function start(slot=selected){
-  setSelected(slot);const target=slots.find(s=>s.slot_number===slot);if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
-  try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;closeHandledRef.current=false;await recorder.prepareToRecordAsync();started.current=Date.now();recorder.record({forDuration:120});void startCloseCommandListener();timer.current=setTimeout(async()=>{stopCloseCommandListener();await recorder.stop();pendingDurationRef.current=120000;setPendingDuration(120000);await sendRecording();},120000);}
-  catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
+  if(recordingLock.current||state.isRecording)return;
+  setSelected(slot);const target=slots.find(s=>s.slot_number===slot);
+  if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
+  recordingLock.current=true;
+  try{
+   const permission=await AudioModule.requestRecordingPermissionsAsync();
+   if(!permission.granted){Alert.alert('إذن الميكروفون','اسمح لمنصت باستخدام الميكروفون.');return;}
+   await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});
+   setMicReady(true);setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;idempotencyRef.current=null;
+   await recorder.prepareToRecordAsync();
+   started.current=Date.now();
+   recorder.record();
+   announce('بدأ التسجيل');
+   timer.current=setTimeout(async()=>{
+    try{
+     await recorder.stop();
+     pendingDurationRef.current=120000;setPendingDuration(120000);
+     announce('انتهى التسجيل، جارٍ إرسال الرسالة');
+     await sendRecording();
+    }catch(e:any){Alert.alert('تعذر إنهاء التسجيل',e?.message||'حاول مرة أخرى.');}
+   },120000);
+  }catch(e:any){Alert.alert('تعذر بدء التسجيل',e?.message||'تحقق من إذن الميكروفون.');}
+  finally{recordingLock.current=false;}
  }
  async function stop(){
-  if(timer.current)clearTimeout(timer.current);stopCloseCommandListener();await recorder.stop();const uri=recorder.uri;
-  if(uri){const duration=Math.min(120000,Date.now()-started.current);pendingDurationRef.current=duration;setPendingDuration(duration);previewPlayer.replace(uri);setPendingRecording(true);}else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
+  if(timer.current)clearTimeout(timer.current);
+  try{
+   await recorder.stop();
+   const uri=recorder.uri;
+   if(uri){
+    const duration=Math.min(120000,Math.max(1000,Date.now()-started.current));
+    pendingDurationRef.current=duration;setPendingDuration(duration);
+    previewPlayer.replace(uri);setPendingRecording(true);
+    announce('انتهى التسجيل');
+   }else Alert.alert('لم يتم التسجيل','لم نحصل على ملف صوتي. حاول مرة أخرى.');
+  }catch(e:any){Alert.alert('تعذر إيقاف التسجيل',e?.message||'حاول مرة أخرى.');}
  }
  useEffect(()=>{const n=Number(params.slot);if(Number.isInteger(n)&&n>=1&&n<=5)setSelected(n);},[params.slot]);
  useEffect(()=>{const n=Number(params.slot);const token=params.autoToken;if(params.autoRecord==='1'&&token&&micReady&&slots.length>0&&handledAutoToken.current!==token){handledAutoToken.current=token;if(Number.isInteger(n)&&n>=1&&n<=5){const timerId=setTimeout(()=>start(n),450);return()=>clearTimeout(timerId);}}},[params.autoRecord,params.autoToken,params.slot,micReady,slots]);
  async function cancelRecording(){
-  if(timer.current)clearTimeout(timer.current);stopCloseCommandListener();previewPlayer.pause();const uri=recorder.uri;
+  if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=recorder.uri;
   if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
   if(idempotencyRef.current&&uri){const ext=uri.toLowerCase().endsWith('.3gp')?'.3gp':uri.toLowerCase().endsWith('.webm')?'.webm':'.m4a';await supabase.storage.from('voice-messages').remove([idempotencyRef.current+ext]).catch(()=>{});}
   idempotencyRef.current=null;setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;
  }
+ const visibleMessages=messages.filter(m=>!friendId||(m.sender_id===friendId||m.recipient_id===friendId)).filter(m=>messageFilter==='all'||(messageFilter==='sent'?m.sender_id===currentUserId:m.recipient_id===currentUserId));
+ const activeFriend=slots.find(s=>s.slot_number===selected)?.friend;
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
-  <Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>الرسائل الصوتية</Text><Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>اختر إحدى خانات الأصدقاء الخمس لتسجيل رسالة.</Text>
+  <View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>{friendId?'المحادثة':'الرسائل الصوتية'}</Text>{friendId?<Pressable onPress={()=>router.replace('/(tabs)/messages')}><Text style={{color:'#4F9864',fontWeight:'700'}}>كل الرسائل</Text></Pressable>:null}</View>
+  <Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>{friendId?'مراسلة '+(activeFriend?.display_name||'الصديق المحدد'):'اختر صديقًا من الخانات الخمس، أو افتح مراسلته من صفحة الأصدقاء.'}</Text>
   <View style={{flexDirection:'row-reverse',gap:8,marginBottom:22}}>{[1,2,3,4,5].map(n=>{const s=slots.find(x=>x.slot_number===n);return <Pressable key={n} disabled={state.isRecording||pendingRecording} onPress={()=>setSelected(n)} style={{flex:1,paddingVertical:13,borderRadius:12,alignItems:'center',backgroundColor:selected===n?green:'#F1F2F1',borderWidth:selected===n?1:0,borderColor:'#6EAD7D'}}><Text style={{fontWeight:'800',color:'#17251A'}}>{n}</Text>{s?.friend?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(s.friend.avatar_key).data.publicUrl}} style={{width:23,height:23,borderRadius:12,marginTop:3}}/>:null}<Text numberOfLines={1} style={{fontSize:9,color:'#555',marginTop:4}}>{s?.friend?.display_name||'فارغة'}</Text></Pressable>})}</View>
   <View style={{backgroundColor:'#F4F5F4',borderRadius:20,padding:24,alignItems:'center'}}><Text style={{fontSize:16,color:'#555'}}>{pendingRecording?'مراجعة التسجيل':state.isRecording?'قل «أغلق» لإرسال الرسالة':'مدة التسجيل'}</Text><Text style={{fontSize:42,fontWeight:'800',color:'#111',marginVertical:14}}>{fmt(pendingRecording?pendingDuration:(state.durationMillis||0))}</Text>
    <Text style={{color:'#777',fontSize:12,marginBottom:20}}>{pendingRecording?'استمع إلى التسجيل قبل إرساله أو ألغِه':'الحد الأقصى دقيقتان، ثم يرسل التسجيل تلقائيًا'}</Text>
@@ -192,7 +176,8 @@ export default function Messages(){
     <Pressable disabled={busy} onPress={cancelRecording} style={{backgroundColor:'#EEE',padding:13,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#555'}}>إلغاء وحذف التسجيل</Text></Pressable>
    </View>:<><Pressable disabled={busy} onPress={state.isRecording?stop:start} style={{width:78,height:78,borderRadius:39,backgroundColor:state.isRecording?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{state.isRecording?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':state.isRecording?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
   </View>
-  <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginTop:30,marginBottom:12,color:'#111'}}>أحدث الرسائل</Text>
-  {messages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>لا توجد رسائل بعد.</Text>:messages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}{hasMoreMessages?<Pressable disabled={loadingMore} onPress={loadMoreMessages} style={{backgroundColor:'#F1F2F1',padding:14,borderRadius:11,marginTop:5,marginBottom:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#444'}}>{loadingMore?'جارٍ تحميل الرسائل…':'تحميل رسائل أقدم'}</Text></Pressable>:null}
+  <View style={{flexDirection:'row-reverse',gap:7,marginTop:28,marginBottom:12}}>{([['all','الكل'],['received','الواردة'],['sent','الصادرة']] as const).map(([key,label])=><Pressable key={key} onPress={()=>setMessageFilter(key)} style={{flex:1,padding:11,borderRadius:10,backgroundColor:messageFilter===key?green:'#F1F2F1'}}><Text style={{textAlign:'center',fontWeight:'700',color:'#26352A'}}>{label}</Text></Pressable>)}</View>
+  <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginBottom:12,color:'#111'}}>{friendId?'سجل المحادثة':'سجل الرسائل الصوتية'}</Text>
+  {visibleMessages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>{messageFilter==='sent'?'لم ترسل رسائل بعد.':messageFilter==='received'?'لا توجد رسائل واردة.':'لا توجد رسائل في هذه المحادثة بعد.'}</Text>:visibleMessages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>){hasMoreMessages?<Pressable disabled={loadingMore} onPress={loadMoreMessages} style={{backgroundColor:'#F1F2F1',padding:14,borderRadius:11,marginTop:5,marginBottom:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#444'}}>{loadingMore?'جارٍ تحميل الرسائل…':'تحميل رسائل أقدم'}</Text></Pressable>:null}
  </ScrollView>;
 }
