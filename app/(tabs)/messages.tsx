@@ -13,7 +13,7 @@ type Message = { id:string; sender_id:string; recipient_id:string; slot_number:n
 const green='#8BC99A';
 const MODEL=(FileSystem.documentDirectory||'')+'vosk/model-ar-tn';
 const IDLE_GRAMMAR=['محادثة واحد','محادثة 1','محادثة الاولى','محادثة الأولى','محادثة اثنين','محادثة اثنان','محادثة 2','محادثة الثانية','محادثة ثلاثة','محادثة ثلاثه','محادثة 3','محادثة الثالثة','محادثة أربعة','محادثة اربعة','محادثة 4','محادثة الرابعة','محادثة خمسة','محادثة 5','محادثة الخامسة','سماع واحد','سماع 1','سماع اثنين','سماع اثنان','سماع 2','سماع ثلاثة','سماع ثلاثه','سماع 3','سماع أربعة','سماع اربعة','سماع 4','سماع خمسة','سماع 5','توقف','[unk]'];
-const RECORD_GRAMMAR=['أغلق','اغلق','إغلاق','إلغاء','الغاء','[unk]'];
+const RECORD_GRAMMAR=['أغلق','اغلق','إغلاق','اغلاق','أغلق التسجيل','اغلق التسجيل','إغلاق التسجيل','اغلاق التسجيل','إلغاء','الغاء','إلغاء التسجيل','الغاء التسجيل','[unk]'];
 function normalizeCommand(s:string){return s.toLowerCase().replace(/[ًٌٍَُِّْـ]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[.,،؛!?؟]/g,' ').replace(/\\s+/g,' ').trim();}
 function commandSlot(s:string,word:'محادثة'|'سماع'){const t=normalizeCommand(s);const m=t.match(new RegExp(word+'\\s+(واحد|1|اثنين|اثنان|2|ثلاثه|ثلاثة|3|اربعه|اربعة|4|خمسه|خمسة|5)'));if(!m)return null;return ({'واحد':1,'1':1,'اثنين':2,'اثنان':2,'2':2,'ثلاثه':3,'ثلاثة':3,'3':3,'اربعه':4,'اربعة':4,'4':4,'خمسه':5,'خمسة':5,'5':5} as Record<string,number>)[m[1]]||null;}
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
@@ -69,6 +69,18 @@ export default function Messages(){
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [pendingUri,setPendingUri]=useState<string|null>(null);const [nativeRecording,setNativeRecording]=useState(false);const [nativeDuration,setNativeDuration]=useState(0);const [voiceSessionReady,setVoiceSessionReady]=useState(false);const [stopPlaybackSignal,setStopPlaybackSignal]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
  const selectedRef=useRef(selected);selectedRef.current=selected;const slotsRef=useRef(slots);slotsRef.current=slots;const pendingUriRef=useRef<string|null>(pendingUri);pendingUriRef.current=pendingUri;const sendingRef=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
  function announce(text:string){return new Promise<void>(resolve=>{Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92,onDone:resolve,onStopped:resolve,onError:()=>resolve()});});}
+ async function cacheIncomingVoiceMessages(rows:Message[],userId:string){
+  for(const item of rows){
+   if(item.recipient_id!==userId||item.deleted_at)continue;
+   try{
+    if(await getCachedVoiceUri(item.id))continue;
+    const {data,error}=await supabase.storage.from('voice-messages').createSignedUrl(item.storage_key,3600);
+    if(error||!data?.signedUrl)continue;
+    await cacheVoiceMessage(item.id,data.signedUrl,item.storage_key.split('.').pop()||'m4a');
+    await supabase.from('voice_messages').update({downloaded_at:new Date().toISOString()}).eq('id',item.id);
+   }catch{/* Retry on the next visit. */}
+  }
+ }
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
   const {data:slotData,error}=await supabase.from('voice_slots').select('slot_number,friend_id,friend:profiles!voice_slots_friend_id_fkey(id,display_name,avatar_key)').eq('owner_id',user.id).order('slot_number');
@@ -76,7 +88,7 @@ export default function Messages(){
   if(!slotData?.length){await supabase.from('voice_slots').upsert([1,2,3,4,5].map(slot_number=>({owner_id:user.id,slot_number,friend_id:null})),{onConflict:'owner_id,slot_number'});setSlots([1,2,3,4,5].map(slot_number=>({slot_number,friend_id:null,friend:null})));}
   else setSlots(slotData as unknown as Slot[]);
   const {data:msg}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or(friendId?'and(sender_id.eq.'+user.id+',recipient_id.eq.'+friendId+'),and(sender_id.eq.'+friendId+',recipient_id.eq.'+user.id+')':'sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(0,19);
-  setMessages((msg||[]) as Message[]);setMessageOffset(20);setHasMoreMessages((msg||[]).length===20);
+  setMessages((msg||[]) as Message[]);void cacheIncomingVoiceMessages((msg||[]) as Message[],user.id);setMessageOffset(20);setHasMoreMessages((msg||[]).length===20);
  },[friendId]);
  useFocusEffect(useCallback(()=>{load();},[load]));
  useEffect(()=>{(async()=>{try{const permission=await AudioModule.requestRecordingPermissionsAsync();if(permission.granted){await setAudioModeAsync({allowsRecording:true,playsInSilentMode:true});setMicReady(true);}}catch{setMicReady(false);}})();},[]);
@@ -92,6 +104,7 @@ export default function Messages(){
    const {data,error}=await supabase.from('voice_messages').select('*,sender:profiles!voice_messages_sender_id_fkey(display_name,avatar_key),recipient:profiles!voice_messages_recipient_id_fkey(display_name,avatar_key)').or(friendId?'and(sender_id.eq.'+user.id+',recipient_id.eq.'+friendId+'),and(sender_id.eq.'+friendId+',recipient_id.eq.'+user.id+')':'sender_id.eq.'+user.id+',recipient_id.eq.'+user.id).order('created_at',{ascending:false}).order('id',{ascending:false}).range(from,from+19);
    if(error)throw error;
    const page=(data||[]) as Message[];
+   void cacheIncomingVoiceMessages(page,user.id);
    setMessages(current=>{const seen=new Set(current.map(item=>item.id));return [...current,...page.filter(item=>!seen.has(item.id))];});
    setMessageOffset(from+page.length);setHasMoreMessages(page.length===20);
   }catch(e:any){Alert.alert('تعذر تحميل الرسائل السابقة',e?.message||'حاول مرة أخرى.');}

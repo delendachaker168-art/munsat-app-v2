@@ -297,7 +297,20 @@ class MunsatAudioCaptureModule : Module() {
             val json = activeRecognizer.result
             val text = try { JSONObject(json).optString("text", "").trim() } catch (_: Exception) { "" }
             if (text.isNotBlank() && text != "[unk]") {
-              sendEvent("onCommand", mapOf("text" to text, "recording" to activeRecording))
+              val normalized = text
+                .replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+                .replace("ى", "ي").replace(" ", "").trim()
+              val closeCommand = normalized in setOf(
+                "اغلق", "اغلاق", "اغلقالتسجيل", "اغلاقالتسجيل",
+                "انهاء", "انهاءالتسجيل"
+              )
+              if (activeRecording && closeCommand) {
+                // Vosk and AAC consume the same AudioRecord PCM stream.
+                // Finalize the encoded file immediately, then JS uploads it.
+                finishRecording("command", false)
+              } else {
+                sendEvent("onCommand", mapOf("text" to text, "recording" to activeRecording))
+              }
             }
           }
 
