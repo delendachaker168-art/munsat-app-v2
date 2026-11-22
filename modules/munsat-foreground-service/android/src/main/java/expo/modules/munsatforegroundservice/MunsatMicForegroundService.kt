@@ -9,15 +9,18 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 class MunsatMicForegroundService : Service() {
+  private var wakeLock: PowerManager.WakeLock? = null
   companion object {
     private const val CHANNEL_ID = "munsat_voice_commands"
     private const val NOTIFICATION_ID = 16821
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    acquireCpuWakeLock()
     createNotificationChannel()
     val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
     val pendingIntent = launchIntent?.let {
@@ -51,6 +54,15 @@ class MunsatMicForegroundService : Service() {
     return START_NOT_STICKY
   }
 
+  private fun acquireCpuWakeLock() {
+    if (wakeLock?.isHeld == true) return
+    val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+    wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:VoiceCommands").apply {
+      setReferenceCounted(false)
+      acquire()
+    }
+  }
+
   private fun createNotificationChannel() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val channel = NotificationChannel(
@@ -65,6 +77,8 @@ class MunsatMicForegroundService : Service() {
   }
 
   override fun onDestroy() {
+    try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {}
+    wakeLock = null
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
       stopForeground(STOP_FOREGROUND_REMOVE)
     } else {
