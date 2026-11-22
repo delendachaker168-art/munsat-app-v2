@@ -65,7 +65,7 @@ export default function Messages(){
  const friendName=typeof params.friendName==='string'?params.friendName:'الصديق';
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
- const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);const commandPlayer=useAudioPlayer(null);const commandStatus=useAudioPlayerStatus(commandPlayer);
+ const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);const commandPlayer=useAudioPlayer(null);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [pendingUri,setPendingUri]=useState<string|null>(null);const [nativeRecording,setNativeRecording]=useState(false);const [nativeDuration,setNativeDuration]=useState(0);const [voiceSessionReady,setVoiceSessionReady]=useState(false);const [stopPlaybackSignal,setStopPlaybackSignal]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
  const selectedRef=useRef(selected);selectedRef.current=selected;const slotsRef=useRef(slots);slotsRef.current=slots;const sendingRef=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
  function announce(text:string){return new Promise<void>(resolve=>{Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92,onDone:resolve,onStopped:resolve,onError:()=>resolve()});});}
@@ -120,7 +120,7 @@ export default function Messages(){
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
    setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingDurationRef.current=0;previewPlayer.pause();await announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
   }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
-  finally{setBusy(false);}
+  finally{sendingRef.current=false;setBusy(false);}
  }
  async function start(slot=selected){
   if(recordingLock.current||state.isRecording||nativeRecordingRef.current)return;
