@@ -1,6 +1,15 @@
 package expo.modules.munsataudiocapture
 
+import android.app.DownloadManager
+import android.content.Context
+import android.content.Intent
 import android.media.AudioFormat
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.PowerManager
+import android.provider.Settings
+import expo.modules.munsatforegroundservice.MunsatMicForegroundService
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -154,11 +163,155 @@ class MunsatAudioCaptureModule : Module() {
       actions.add(CaptureAction.CancelRecording)
     }
     Function("isRecording") { activeRecording }
+    AsyncFunction("startModelDownload") { url: String, fileName: String ->
+      startModelDownload(url, fileName)
+    }
+    AsyncFunction("getModelDownloadStatus") { getModelDownloadStatus() }
+    AsyncFunction("removeModelDownload") { removeModelDownload() }
+    Function("isIgnoringBatteryOptimizations") { isIgnoringBatteryOptimizations() }
+    AsyncFunction("requestBatteryOptimizationExemption") { requestBatteryOptimizationExemption() }
+    AsyncFunction("openAppSettings") { openAppSettings() }
     OnDestroy {
       stopSession()
       try { model?.close() } catch (_: Exception) {}
       model = null
     }
+  }
+
+
+  private fun contextOrThrow(): Context =
+    appContext.reactContext?.applicationContext
+      ?: throw IllegalStateException("تعذر الوصول إلى سياق التطبيق.")
+
+  private fun downloadManager(context: Context): DownloadManager =
+    context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+
+  private fun downloadPreferences(context: Context) =
+    context.getSharedPreferences("munsat_model_download", Context.MODE_PRIVATE)
+
+  private fun readModelDownloadStatus(): Map<String, Any?> {
+    val context = contextOrThrow()
+    val prefs = downloadPreferences(context)
+    val id = prefs.getLong("download_id", -1L)
+    val path = prefs.getString("download_path", null)
+    if (id < 0L || path.isNullOrBlank()) {
+      return mapOf("status" to "none", "downloadedBytes" to 0L, "totalBytes" to 0L)
+    }
+
+    val cursor = downloadManager(context).query(DownloadManager.Query().setFilterById(id))
+    cursor?.use {
+      if (it.moveToFirst()) {
+        val rawStatus = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+        val downloaded = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+        val total = it.getLong(it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+        val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+        val status = when (rawStatus) {
+          DownloadManager.STATUS_PENDING -> "pending"
+          DownloadManager.STATUS_RUNNING -> "running"
+          DownloadManager.STATUS_PAUSED -> "paused"
+          DownloadManager.STATUS_SUCCESSFUL -> if (File(path).exists()) "complete" else "failed"
+          DownloadManager.STATUS_FAILED -> "failed"
+          else -> "unknown"
+        }
+        return mapOf(
+          "id" to id,
+          "status" to status,
+          "downloadedBytes" to downloaded,
+          "totalBytes" to total,
+          "fileUri" to if (status == "complete") Uri.fromFile(File(path)).toString() else null,
+          "reason" to reason
+        )
+      }
+    }
+    return mapOf("id" to id, "status" to "failed", "downloadedBytes" to 0L, "totalBytes" to 0L, "reason" to -1)
+  }
+
+  private fun startModelDownload(url: String, fileName: String): Map<String, Any?> {
+    val context = contextOrThrow()
+    val manager = downloadManager(context)
+    val prefs = downloadPreferences(context)
+    val existing = readModelDownloadStatus()
+    val currentStatus = existing["status"] as? String
+    if (currentStatus == "pending" || currentStatus == "running" || currentStatus == "paused" || currentStatus == "complete") {
+      return existing
+    }
+
+    val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+    if (!directory.exists()) directory.mkdirs()
+    val safeName = fileName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+    val destination = File(directory, safeName)
+    if (destination.exists()) destination.delete()
+
+    val request = DownloadManager.Request(Uri.parse(url))
+      .setTitle("تنزيل أداة التعرف الصوتي")
+      .setDescription("سيستمر التنزيل في الخلفية ويُستأنف تلقائيًا عند عودة الاتصال.")
+      .setMimeType("application/zip")
+      .setDestinationUri(Uri.fromFile(destination))
+      .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+      .setAllowedOverMetered(true)
+      .setAllowedOverRoaming(false)
+
+    val id = manager.enqueue(request)
+    prefs.edit()
+      .putLong("download_id", id)
+      .putString("download_path", destination.absolutePath)
+      .apply()
+    return mapOf("id" to id, "status" to "pending", "downloadedBytes" to 0L, "totalBytes" to -1L)
+  }
+
+  private fun getModelDownloadStatus(): Map<String, Any?> = readModelDownloadStatus()
+
+  private fun removeModelDownload() {
+    val context = contextOrThrow()
+    val prefs = downloadPreferences(context)
+    val id = prefs.getLong("download_id", -1L)
+    val path = prefs.getString("download_path", null)
+    if (id >= 0L) downloadManager(context).remove(id)
+    if (!path.isNullOrBlank()) try { File(path).delete() } catch (_: Exception) {}
+    prefs.edit().clear().apply()
+  }
+
+  private fun isIgnoringBatteryOptimizations(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+    val context = contextOrThrow()
+    val power = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    return power.isIgnoringBatteryOptimizations(context.packageName)
+  }
+
+  private fun requestBatteryOptimizationExemption() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || isIgnoringBatteryOptimizations()) return
+    val context = contextOrThrow()
+    val intent = Intent(
+      Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+      Uri.parse("package:" + context.packageName)
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+  }
+
+  private fun openAppSettings() {
+    val context = contextOrThrow()
+    val intent = Intent(
+      Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+      Uri.parse("package:" + context.packageName)
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    context.startActivity(intent)
+  }
+
+  private fun startForegroundCaptureService() {
+    val context = contextOrThrow()
+    val intent = Intent(context, MunsatMicForegroundService::class.java)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      context.startForegroundService(intent)
+    } else {
+      context.startService(intent)
+    }
+  }
+
+  private fun stopForegroundCaptureService() {
+    try {
+      val context = appContext.reactContext?.applicationContext ?: return
+      context.stopService(Intent(context, MunsatMicForegroundService::class.java))
+    } catch (_: Exception) {}
   }
 
   @Synchronized
@@ -193,6 +346,7 @@ class MunsatAudioCaptureModule : Module() {
       throw IllegalStateException("الميكروفون غير متاح. أغلق أي تطبيق يستخدمه ثم حاول مجددًا.")
     }
 
+    startForegroundCaptureService()
     audioRecord = record
     running = true
     captureThread = Thread({ captureLoop(record, model!!) }, "MunsatSharedMic").also { it.start() }
@@ -332,6 +486,7 @@ class MunsatAudioCaptureModule : Module() {
       running = false
       activeRecording = false
       captureThread = null
+      stopForegroundCaptureService()
     }
   }
 
