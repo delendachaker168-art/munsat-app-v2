@@ -18,7 +18,7 @@ function textOf(v:any){return typeof v==='string'?v:typeof v?.text==='string'?v.
 export default function VoiceCommand(){
  const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[listening,setListening]=useState(false),[progress,setProgress]=useState(0),[status,setStatus]=useState('جارٍ فحص أداة التعرف الصوتي…'),[heard,setHeard]=useState('');
  const listeners=useRef<any[]>([]),loaded=useRef(false),handled=useRef(false),mounted=useRef(true);
- useEffect(()=>{mounted.current=true;(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL);if(info.exists){const files=await FileSystem.readDirectoryAsync(MODEL);if(files.includes('am')&&files.includes('conf')){setReady(true);setStatus('أداة التعرف الصوتي مثبتة. اضغط بدء الاستماع.');return;}}setStatus('أداة التعرف الصوتي غير مثبتة. نزّلها مرة واحدة لتعمل الأوامر دون إنترنت.');}catch(e:any){setStatus('تعذر فحص ملفات التعرف الصوتي: '+(e?.message||''));}})();return()=>{mounted.current=false;try{Vosk.stop();if(loaded.current)Vosk.unload();}catch{}listeners.current.forEach(x=>x?.remove?.());};},[]);
+ useEffect(()=>{mounted.current=true;(async()=>{try{await FileSystem.makeDirectoryAsync(ROOT,{intermediates:true});const info=await FileSystem.getInfoAsync(MODEL);if(info.exists){const files=await FileSystem.readDirectoryAsync(MODEL);if(files.includes('am')&&files.includes('conf')){setReady(true);setStatus('أداة التعرف الصوتي مثبتة؛ جارٍ بدء الاستماع تلقائيًا.');await startListening();return;}}setStatus('أداة التعرف الصوتي غير مثبتة. نزّلها مرة واحدة لتعمل الأوامر دون إنترنت.');}catch(e:any){setStatus('تعذر فحص ملفات التعرف الصوتي: '+(e?.message||''));}})();return()=>{mounted.current=false;try{Vosk.stop();if(loaded.current)Vosk.unload();}catch{}listeners.current.forEach(x=>x?.remove?.());};},[]);
  function clearListeners(){listeners.current.forEach(x=>x?.remove?.());listeners.current=[];}
  async function downloadModel(){
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف الصوتي متاح حاليًا على Android فقط.');return;}
@@ -36,12 +36,11 @@ export default function VoiceCommand(){
    await FileSystem.deleteAsync(MODEL,{idempotent:true});await FileSystem.moveAsync({from:out+'/'+folder,to:MODEL});
    await FileSystem.deleteAsync(out,{idempotent:true});await FileSystem.deleteAsync(ZIP,{idempotent:true});
    const check=await FileSystem.readDirectoryAsync(MODEL);if(!check.includes('am')||!check.includes('conf'))throw new Error('لم يكتمل تثبيت النموذج العربي.');
-   setReady(true);setStatus('تم تثبيت أداة التعرف الصوتي. يمكنك بدء الاستماع الآن.');
+   setReady(true);setStatus('تم تثبيت أداة التعرف الصوتي؛ جارٍ بدء الاستماع الآن.');await startListening();
   }catch(e:any){setStatus('فشل تنزيل أو تثبيت أداة الصوت.');Alert.alert('تعذر تثبيت أداة الصوت',e?.message||'تحقق من الإنترنت ومساحة الهاتف.');}
   finally{setBusy(false);}
  }
  async function startListening(){
-  if(!ready)return;
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف المحلي متاح حاليًا على Android.');return;}
   try{
    const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted)throw new Error('اسمح لمنصت باستخدام الميكروفون.');
@@ -73,7 +72,7 @@ export default function VoiceCommand(){
    <Text style={{textAlign:'right',color:'#4F9864',lineHeight:24,marginTop:10}}>{status}</Text>
    {!ready&&!busy?<Text style={{textAlign:'right',color:'#777',fontSize:12,marginTop:8}}>التنزيل الأول نحو 158 ميغابايت، وبعده يعمل التعرف دون إنترنت.</Text>:null}
    {busy?<View style={{height:8,backgroundColor:'#DDD',borderRadius:8,overflow:'hidden',marginTop:16}}><View style={{height:8,width:(progress+'%') as any,backgroundColor:GREEN}}/></View>:null}
-   <Pressable disabled={busy} onPress={mainAction} style={{backgroundColor:listening?'#D96B6B':GREEN,padding:16,borderRadius:12,marginTop:18,opacity:busy?.6:1}}>
+   <Pressable disabled={busy} onPress={mainAction} style={{backgroundColor:listening?'#D96B6B':GREEN,padding:16,borderRadius:12,marginTop:18,opacity:busy ? 0.6 : 1}}>
     <Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{busy?'جارٍ التجهيز…':listening?'إيقاف التعرف الصوتي':ready?'ابدأ التعرف على الأوامر':'تنزيل أداة التعرف الصوتي'}</Text>
    </Pressable>
    {ready&&!listening&&!busy?<Pressable onPress={startListening} style={{backgroundColor:'#E5F0E7',padding:13,borderRadius:10,marginTop:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#315B3B'}}>بدء الاستماع الآن</Text></Pressable>:null}
