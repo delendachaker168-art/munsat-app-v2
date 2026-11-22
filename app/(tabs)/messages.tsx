@@ -18,9 +18,10 @@ function normalizeCommand(s:string){return s.toLowerCase().replace(/[ًٌٍَُ�
 function commandSlot(s:string,word:'محادثة'|'سماع'){const t=normalizeCommand(s);const m=t.match(new RegExp(word+'\\s+(واحد|1|اثنين|اثنان|2|ثلاثه|ثلاثة|3|اربعه|اربعة|4|خمسه|خمسة|5)'));if(!m)return null;return ({'واحد':1,'1':1,'اثنين':2,'اثنان':2,'2':2,'ثلاثه':3,'ثلاثة':3,'3':3,'اربعه':4,'اربعة':4,'4':4,'خمسه':5,'خمسة':5,'5':5} as Record<string,number>)[m[1]]||null;}
 function fmt(ms:number){const s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
-function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void}){
+function VoiceMessageCard({message,currentUserId,onListened,stopSignal}:{message:Message;currentUserId:string;onListened:(id:string,at:string)=>void;stopSignal:number}){
  const player=useAudioPlayer(null);const status=useAudioPlayerStatus(player);const [loading,setLoading]=useState(false);const [loadedMessageId,setLoadedMessageId]=useState<string|null>(null);const [hasLocalCopy,setHasLocalCopy]=useState(false);
  useEffect(()=>{let active=true;getCachedVoiceUri(message.id).then(uri=>{if(active)setHasLocalCopy(Boolean(uri));});return()=>{active=false;};},[message.id]);
+ useEffect(()=>{if(stopSignal>0)player.pause();},[stopSignal,player]);
  async function play(){
   if(status.playing){player.pause();return;}
   setLoading(true);
@@ -65,8 +66,8 @@ export default function Messages(){
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);const commandPlayer=useAudioPlayer(null);const commandStatus=useAudioPlayerStatus(commandPlayer);
- const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [pendingUri,setPendingUri]=useState<string|null>(null);const [nativeRecording,setNativeRecording]=useState(false);const [nativeDuration,setNativeDuration]=useState(0);const [voiceSessionReady,setVoiceSessionReady]=useState(false);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
- const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
+ const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [pendingUri,setPendingUri]=useState<string|null>(null);const [nativeRecording,setNativeRecording]=useState(false);const [nativeDuration,setNativeDuration]=useState(0);const [voiceSessionReady,setVoiceSessionReady]=useState(false);const [stopPlaybackSignal,setStopPlaybackSignal]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
+ const selectedRef=useRef(selected);selectedRef.current=selected;const slotsRef=useRef(slots);slotsRef.current=slots;const sendingRef=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
  function announce(text:string){return new Promise<void>(resolve=>{Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92,onDone:resolve,onStopped:resolve,onError:()=>resolve()});});}
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
@@ -97,9 +98,9 @@ export default function Messages(){
   finally{setLoadingMore(false);}
  }
  async function sendRecording(recordingUri?:string,durationOverride?:number){
-  if(busy)return;setBusy(true);const uri=recordingUri||pendingUri||recorder.uri;
+  if(sendingRef.current)return;sendingRef.current=true;setBusy(true);const uri=recordingUri||pendingUri||recorder.uri;const selectedSlot=selectedRef.current;
   try{
-   const target=slots.find(s=>s.slot_number===selected);
+   const target=slotsRef.current.find(s=>s.slot_number===selectedSlot);
    const recipientId=friendId||target?.friend_id;
    if(!uri||!recipientId){Alert.alert('اختر صديقًا','خصص هذه الخانة لصديق من صفحة الأصدقاء أولًا.');setPendingRecording(Boolean(uri));return;}
    const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)throw new Error('انتهت جلسة الدخول.');
@@ -110,7 +111,7 @@ export default function Messages(){
    const key=idempotencyKey+extension;
    const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:true});if(uploadError)throw uploadError;
    const duration=Math.min(120000,Math.max(1000,durationOverride||pendingDurationRef.current||Date.now()-started.current));
-   const {data:inserted,error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:recipientId,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey}).select('id').single();
+   const {data:inserted,error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:recipientId,slot_number:selectedSlot,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey}).select('id').single();
    let messageId=inserted?.id as string|undefined;
    if(insertError){const {data:existing,error:lookupError}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(lookupError||!existing)throw insertError;messageId=existing.id;}
    if(!messageId)throw new Error('تم رفع الملف لكن تعذر حفظ سجل الرسالة.');
@@ -123,7 +124,7 @@ export default function Messages(){
  }
  async function start(slot=selected){
   if(recordingLock.current||state.isRecording||nativeRecordingRef.current)return;
-  setSelected(slot);const target=slots.find(s=>s.slot_number===slot);
+  setSelected(slot);const target=slotsRef.current.find(s=>s.slot_number===slot);
   if(!friendId&&!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
   recordingLock.current=true;
   try{
@@ -167,7 +168,7 @@ export default function Messages(){
   }catch(e:any){Alert.alert('تعذر إيقاف التسجيل',e?.message||'حاول مرة أخرى.');}
  }
  async function playLatestVoice(slot:number){
-  const target=slots.find(s=>s.slot_number===slot);const senderId=target?.friend_id;
+  const target=slotsRef.current.find(s=>s.slot_number===slot);const senderId=target?.friend_id;
   if(!senderId){await announce('هذه الخانة غير مخصصة لصديق');return;}
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;
   const {data:latest,error}=await supabase.from('voice_messages').select('*').eq('sender_id',senderId).eq('recipient_id',user.id).order('created_at',{ascending:false}).limit(1).maybeSingle();
@@ -192,7 +193,7 @@ export default function Messages(){
   }
   const chatSlot=commandSlot(raw,'محادثة');if(chatSlot){await start(chatSlot);return;}
   const playSlot=commandSlot(raw,'سماع');if(playSlot){try{await playLatestVoice(playSlot);}catch(e:any){Alert.alert('تعذر تشغيل الرسالة',e?.message||'');}return;}
-  if(/^(توقف|وقف)$/.test(text)){commandPlayer.pause();previewPlayer.pause();}
+  if(/^(توقف|وقف)$/.test(text)){commandPlayer.pause();previewPlayer.pause();setStopPlaybackSignal(v=>v+1);}
  }
  useFocusEffect(useCallback(()=>{
   if(params.voiceControl!=='1'||!micReady||slots.length===0)return;
@@ -252,12 +253,12 @@ export default function Messages(){
    <Text style={{color:'#777',fontSize:12,marginBottom:20}}>{pendingRecording?'استمع إلى التسجيل قبل إرساله أو ألغِه':params.voiceControl==='1'?'يمكنك قول «أغلق» لإرسال الرسالة أو «إلغاء» لحذفها. الحد دقيقتان.':'الحد الأقصى دقيقتان، ثم يرسل التسجيل تلقائيًا'}</Text>
    {pendingRecording?<View style={{width:'100%',gap:10}}>
     <Pressable onPress={()=>{if(previewStatus.playing)previewPlayer.pause();else{if(previewStatus.duration>0&&previewStatus.currentTime>=previewStatus.duration)previewPlayer.seekTo(0);previewPlayer.play();}}} style={{backgroundColor:'#E7E9E7',padding:14,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#222'}}>{previewStatus.playing?'إيقاف الاستماع':'استماع إلى التسجيل'}</Text></Pressable>
-    <Pressable disabled={busy} onPress={sendRecording} style={{backgroundColor:green,padding:15,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{busy?'جارٍ الإرسال…':'إرسال الرسالة'}</Text></Pressable>
+    <Pressable disabled={busy} onPress={()=>sendRecording()} style={{backgroundColor:green,padding:15,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'800',color:'#17351E'}}>{busy?'جارٍ الإرسال…':'إرسال الرسالة'}</Text></Pressable>
     <Pressable disabled={busy} onPress={cancelRecording} style={{backgroundColor:'#EEE',padding:13,borderRadius:11}}><Text style={{textAlign:'center',fontWeight:'700',color:'#555'}}>إلغاء وحذف التسجيل</Text></Pressable>
    </View>:<><Pressable disabled={busy} onPress={recordingActive?stop:()=>start()} style={{width:78,height:78,borderRadius:39,backgroundColor:recordingActive?'#D96B6B':green,alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:26,color:'#17351E'}}>{recordingActive?'■':'●'}</Text></Pressable><Text style={{marginTop:14,color:'#444',fontWeight:'700'}}>{busy?'جارٍ الإرسال…':recordingActive?'إغلاق التسجيل ومراجعته':'اضغط لبدء التسجيل'}</Text></>}
   </View>
   <View style={{flexDirection:'row-reverse',gap:7,marginTop:28,marginBottom:12}}>{([['all','الكل'],['received','الواردة'],['sent','الصادرة']] as const).map(([key,label])=><Pressable key={key} onPress={()=>setMessageFilter(key)} style={{flex:1,padding:11,borderRadius:10,backgroundColor:messageFilter===key?green:'#F1F2F1'}}><Text style={{textAlign:'center',fontWeight:'700',color:'#26352A'}}>{label}</Text></Pressable>)}</View>
   <Text style={{fontSize:20,fontWeight:'800',textAlign:'right',marginBottom:12,color:'#111'}}>{friendId?'سجل المحادثة':'سجل الرسائل الصوتية'}</Text>
-  {visibleMessages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>{messageFilter==='sent'?'لم ترسل رسائل بعد.':messageFilter==='received'?'لا توجد رسائل واردة.':'لا توجد رسائل في هذه المحادثة بعد.'}</Text>:visibleMessages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}{hasMoreMessages?<Pressable disabled={loadingMore} onPress={loadMoreMessages} style={{backgroundColor:'#F1F2F1',padding:14,borderRadius:11,marginTop:5,marginBottom:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#444'}}>{loadingMore?'جارٍ تحميل الرسائل…':'تحميل رسائل أقدم'}</Text></Pressable>:null}
+  {visibleMessages.length===0?<Text style={{textAlign:'right',color:'#888',padding:14}}>{messageFilter==='sent'?'لم ترسل رسائل بعد.':messageFilter==='received'?'لا توجد رسائل واردة.':'لا توجد رسائل في هذه المحادثة بعد.'}</Text>:visibleMessages.map(m=><VoiceMessageCard key={m.id} message={m} currentUserId={currentUserId} stopSignal={stopPlaybackSignal} onListened={(id,at)=>setMessages(v=>v.map(x=>x.id===id?{...x,listened_at:at}:x))}/>)}{hasMoreMessages?<Pressable disabled={loadingMore} onPress={loadMoreMessages} style={{backgroundColor:'#F1F2F1',padding:14,borderRadius:11,marginTop:5,marginBottom:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#444'}}>{loadingMore?'جارٍ تحميل الرسائل…':'تحميل رسائل أقدم'}</Text></Pressable>:null}
  </ScrollView>;
 }
