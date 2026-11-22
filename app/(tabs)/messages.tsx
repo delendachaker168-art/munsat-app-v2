@@ -112,7 +112,7 @@ export default function Messages(){
    if(insertError){const {data:existing}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(!existing)throw insertError;}
    idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-   setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
+   setPendingRecording(false);setPendingDuration(0);pendingDurationRef.current=0;previewPlayer.pause();announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
   }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
   finally{setBusy(false);}
  }
