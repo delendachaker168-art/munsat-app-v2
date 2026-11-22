@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
-import expo.modules.munsatforegroundservice.MunsatMicForegroundService
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
@@ -299,7 +298,7 @@ class MunsatAudioCaptureModule : Module() {
 
   private fun startForegroundCaptureService() {
     val context = contextOrThrow()
-    val intent = Intent(context, MunsatMicForegroundService::class.java)
+    val intent = Intent().setClassName(context, "expo.modules.munsatforegroundservice.MunsatMicForegroundService")
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       context.startForegroundService(intent)
     } else {
@@ -310,7 +309,7 @@ class MunsatAudioCaptureModule : Module() {
   private fun stopForegroundCaptureService() {
     try {
       val context = appContext.reactContext?.applicationContext ?: return
-      context.stopService(Intent(context, MunsatMicForegroundService::class.java))
+      context.stopService(Intent().setClassName(context, "expo.modules.munsatforegroundservice.MunsatMicForegroundService"))
     } catch (_: Exception) {}
   }
 
