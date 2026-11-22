@@ -234,6 +234,10 @@ class MunsatAudioCaptureModule : Module() {
     if (currentStatus == "pending" || currentStatus == "running" || currentStatus == "paused" || currentStatus == "complete") {
       return existing
     }
+    if (currentStatus == "failed") {
+      val previousId = prefs.getLong("download_id", -1L)
+      if (previousId >= 0L) manager.remove(previousId)
+    }
 
     val directory = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
     if (!directory.exists()) directory.mkdirs()
