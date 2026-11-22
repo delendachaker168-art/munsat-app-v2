@@ -85,7 +85,11 @@ export default function VoiceCommand(){
    {ready&&!listening&&!busy?<Pressable onPress={startListening} style={{backgroundColor:'#E5F0E7',padding:13,borderRadius:10,marginTop:10}}><Text style={{textAlign:'center',fontWeight:'700',color:'#315B3B'}}>بدء الاستماع الآن</Text></Pressable>:null}
   </View>
   {listening?<View style={{backgroundColor:'#EAF5EC',padding:17,borderRadius:14,marginTop:16}}><Text style={{textAlign:'center',fontWeight:'800',color:'#356B43'}}>● الاستماع نشط</Text><Text style={{textAlign:'center',color:'#555',marginTop:9}}>{heard||'قل: محادثة واحد، اثنين، ثلاثة، أربعة، أو خمسة.'}</Text></View>:null}
-  <Text style={{textAlign:'right',color:'#888',fontSize:12,lineHeight:21,marginTop:22}}>عند قول «محادثة واحد» إلى «محادثة خمسة» يفتح التطبيق خانة الصديق ويبدأ التسجيل تلقائيًا. يجب تخصيص صديق للخانة أولًا.</Text>
+  <View style={{backgroundColor:'#F3F4F3',padding:17,borderRadius:14,marginTop:22}}>
+   <Text style={{textAlign:'right',fontWeight:'800',color:'#222',marginBottom:10}}>الأوامر الصوتية</Text>
+   <Text style={{textAlign:'right',color:'#555',lineHeight:27}}>• «محادثة واحد» إلى «محادثة خمسة»: فتح الخانة وبدء التسجيل.{"\n"}• «أغلق»: إنهاء التسجيل وإرسال الرسالة تلقائيًا.{"\n"}• «إلغاء»: حذف التسجيل دون إرساله.{"\n"}• «سماع واحد» إلى «سماع خمسة»: تشغيل آخر رسالة واردة من الخانة.{"\n"}• «توقف»: إيقاف تشغيل الرسالة.</Text>
+   <Text style={{textAlign:'right',color:'#777',fontSize:12,lineHeight:21,marginTop:9}}>خصص صديقًا لكل خانة قبل استخدامها.</Text>
+  </View>
   <Pressable onPress={()=>router.back()} style={{padding:14,marginTop:16}}><Text style={{textAlign:'center',color:'#4F9864',fontWeight:'700'}}>رجوع</Text></Pressable>
  </ScrollView>;
 }
