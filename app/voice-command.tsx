@@ -58,7 +58,7 @@ export default function VoiceCommand(){
      setStatus(slot?'تم التعرف على الخانة '+slot+'، جارٍ فتح المحادثة وبدء التسجيل.':'جارٍ فتح الرسالة الصوتية المطلوبة.');
      setListening(false);clearListeners();
      const routeParams={pathname:'/(tabs)/messages' as const,params:{slot:String(slot||playSlot),autoRecord:slot?'1':'0',autoToken:String(Date.now()),playSlot:playSlot?String(playSlot):undefined,voiceControl:'1'}};
-     void MunsatAudioCapture.stopSession().then(()=>{if(mounted.current)router.push(routeParams);}).catch((e:any)=>Alert.alert('تعذر فتح المحادثة',e?.message||''));
+     void MunsatAudioCapture.stopSession().then(()=>{if(mounted.current)router.push(routeParams);}).catch((e:any)=>{routeHandled.current=false;Alert.alert('تعذر فتح المحادثة',e?.message||'');});
     }else if(normalize(recognized)==='توقف'){
      setStatus('لا توجد رسالة قيد التشغيل الآن.');
     }

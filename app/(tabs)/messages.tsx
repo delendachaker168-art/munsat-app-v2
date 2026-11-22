@@ -125,7 +125,7 @@ export default function Messages(){
  async function start(slot=selected){
   if(recordingLock.current||state.isRecording||nativeRecordingRef.current)return;
   if(pendingUriRef.current){await announce('أرسل التسجيل السابق أو ألغِه أولًا');return;}
-  setSelected(slot);const target=slotsRef.current.find(s=>s.slot_number===slot);
+  selectedRef.current=slot;setSelected(slot);const target=slotsRef.current.find(s=>s.slot_number===slot);
   if(!friendId&&!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
   recordingLock.current=true;
   try{
