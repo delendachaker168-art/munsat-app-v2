@@ -78,7 +78,8 @@ export default function VoiceCommand(){
   if(Platform.OS!=='android'){Alert.alert('غير متاح','التعرف المحلي متاح حاليًا على Android.');return;}
   try{
    const permission=await AudioModule.requestRecordingPermissionsAsync();if(!permission.granted)throw new Error('اسمح لمنصت باستخدام الميكروفون.');
-   if(Platform.Version>=33){const n=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);if(n!==PermissionsAndroid.RESULTS.GRANTED)setStatus('يمكنك الاستماع أثناء فتح التطبيق؛ الإشعار غير مفعّل.');}
+   if(Platform.Version>=33){const n=await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);if(n!==PermissionsAndroid.RESULTS.GRANTED){setStatus('إذن الإشعارات غير مفعّل؛ فعّله ليظهر إشعار استمرار الاستماع.');Alert.alert('إذن الإشعارات','يساعد الإشعار الدائم على إبقاء خدمة الأوامر الصوتية ظاهرة أثناء إطفاء الشاشة.',[{text:'لاحقًا',style:'cancel'},{text:'فتح الإعدادات',onPress:()=>void MunsatAudioCapture.openAppSettings()}]);}}
+   if(!(await MunsatAudioCapture.isIgnoringBatteryOptimizations())){Alert.alert('السماح بالعمل في الخلفية','اسمح لمنصت بتجاوز تحسين البطارية حتى لا يوقف النظام الاستماع عند إطفاء الشاشة.',[{text:'لاحقًا',style:'cancel'},{text:'السماح',onPress:()=>void MunsatAudioCapture.requestBatteryOptimizationExemption()}]);}
    setBusy(true);setStatus('جارٍ تشغيل التعرف الصوتي عبر الميكروفون المشترك…');
    await MunsatAudioCapture.stopSession();clearListeners();routeHandled.current=false;setHeard('');
    listeners.current.push(MunsatAudioCapture.addListener('onCommand',(v:any)=>{
