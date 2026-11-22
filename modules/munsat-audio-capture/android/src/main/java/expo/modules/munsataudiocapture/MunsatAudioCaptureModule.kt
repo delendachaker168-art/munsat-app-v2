@@ -85,7 +85,7 @@ private class AacMuxerWriter(private val output: File) {
         }
         outputIndex >= 0 -> {
           val encoded = encoder.getOutputBuffer(outputIndex)
-          if (encoded != null && info.size > 0 && muxerStarted) {
+          if (encoded != null && info.size > 0 && muxerStarted && (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
             encoded.position(info.offset)
             encoded.limit(info.offset + info.size)
             muxer.writeSampleData(trackIndex, encoded, info)
@@ -311,7 +311,7 @@ class MunsatAudioCaptureModule : Module() {
     } catch (e: Exception) {
       sendEvent("onCaptureError", mapOf("message" to (e.message ?: "حدث خطأ في التقاط الصوت.")))
     } finally {
-      if (activeRecording) finishRecording("sessionStopped", false)
+      if (activeRecording) finishRecording("sessionStopped", true)
       try { recognizer?.close() } catch (_: Exception) {}
       try { record.stop() } catch (_: Exception) {}
       try { record.release() } catch (_: Exception) {}

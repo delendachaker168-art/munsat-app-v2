@@ -67,7 +67,7 @@ export default function Messages(){
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);const commandPlayer=useAudioPlayer(null);
  const [slots,setSlots]=useState<Slot[]>([]);const [selected,setSelected]=useState(1);const [messages,setMessages]=useState<Message[]>([]);const [messageFilter,setMessageFilter]=useState<'all'|'sent'|'received'>('all');const [messageOffset,setMessageOffset]=useState(20);const [hasMoreMessages,setHasMoreMessages]=useState(false);const [loadingMore,setLoadingMore]=useState(false);const [busy,setBusy]=useState(false);const [pendingRecording,setPendingRecording]=useState(false);const [pendingDuration,setPendingDuration]=useState(0);const [pendingUri,setPendingUri]=useState<string|null>(null);const [nativeRecording,setNativeRecording]=useState(false);const [nativeDuration,setNativeDuration]=useState(0);const [voiceSessionReady,setVoiceSessionReady]=useState(false);const [stopPlaybackSignal,setStopPlaybackSignal]=useState(0);const [micReady,setMicReady]=useState(false);const [currentUserId,setCurrentUserId]=useState('');
- const selectedRef=useRef(selected);selectedRef.current=selected;const slotsRef=useRef(slots);slotsRef.current=slots;const sendingRef=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
+ const selectedRef=useRef(selected);selectedRef.current=selected;const slotsRef=useRef(slots);slotsRef.current=slots;const pendingUriRef=useRef<string|null>(pendingUri);pendingUriRef.current=pendingUri;const sendingRef=useRef(false);const timer=useRef<ReturnType<typeof setTimeout>|null>(null);const started=useRef(0);const nativeRecordingRef=useRef(false);const nativeStartedAt=useRef(0);const handledPlaySlot=useRef<string|null>(null);const voiceSubscriptions=useRef<any[]>([]);const pendingDurationRef=useRef(0);const handledAutoToken=useRef<string|null>(null);const idempotencyRef=useRef<string|null>(null);const recordingLock=useRef(false);
  function announce(text:string){return new Promise<void>(resolve=>{Speech.stop();Speech.speak(text,{language:'ar-SA',rate:0.92,onDone:resolve,onStopped:resolve,onError:()=>resolve()});});}
  const load=useCallback(async()=>{
   const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)return;setCurrentUserId(user.id);
@@ -118,12 +118,13 @@ export default function Messages(){
    await cacheLocalVoiceMessage(messageId,uri);
    idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
-   setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingDurationRef.current=0;previewPlayer.pause();await announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
+   setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingUriRef.current=null;pendingDurationRef.current=0;previewPlayer.pause();await announce('تم إرسال الرسالة');Alert.alert('تم الإرسال','أُرسلت الرسالة الصوتية بنجاح.');await load();
   }catch(e:any){setPendingRecording(Boolean(uri));if(uri)previewPlayer.replace(uri);Alert.alert('تعذر الإرسال','احتفظنا بالتسجيل لتتمكن من إعادة المحاولة. '+(e?.message||''));}
   finally{sendingRef.current=false;setBusy(false);}
  }
  async function start(slot=selected){
   if(recordingLock.current||state.isRecording||nativeRecordingRef.current)return;
+  if(pendingUriRef.current){await announce('أرسل التسجيل السابق أو ألغِه أولًا');return;}
   setSelected(slot);const target=slotsRef.current.find(s=>s.slot_number===slot);
   if(!friendId&&!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
   recordingLock.current=true;
@@ -201,18 +202,18 @@ export default function Messages(){
   voiceSubscriptions.current.forEach(x=>x?.remove?.());voiceSubscriptions.current=[];
   voiceSubscriptions.current.push(MunsatAudioCapture.addListener('onCommand',(event:any)=>{if(active&&event?.text)void handleVoiceCommand(event.text);}));
   voiceSubscriptions.current.push(MunsatAudioCapture.addListener('onRecordingStarted',()=>{
-   if(!active)return;nativeRecordingRef.current=true;setNativeRecording(true);setNativeDuration(0);nativeStartedAt.current=Date.now();setPendingRecording(false);setPendingUri(null);
+   if(!active)return;nativeRecordingRef.current=true;setNativeRecording(true);setNativeDuration(0);nativeStartedAt.current=Date.now();setPendingRecording(false);setPendingUri(null);pendingUriRef.current=null;
   }));
   voiceSubscriptions.current.push(MunsatAudioCapture.addListener('onRecordingStopped',(event:any)=>{
    if(!active)return;nativeRecordingRef.current=false;setNativeRecording(false);
    const uri=event?.uri as string|undefined;const duration=Number(event?.durationMs)||Math.max(1000,Date.now()-nativeStartedAt.current);
-   if(!uri)return;setPendingUri(uri);setPendingDuration(duration);pendingDurationRef.current=duration;setPendingRecording(true);previewPlayer.replace(uri);
+   if(!uri)return;pendingUriRef.current=uri;setPendingUri(uri);setPendingDuration(duration);pendingDurationRef.current=duration;setPendingRecording(true);previewPlayer.replace(uri);
    if(event?.reason==='command'||event?.reason==='limit'){
     void announce(event.reason==='limit'?'بلغ التسجيل دقيقتين، جارٍ الإرسال':'تم إغلاق التسجيل، جارٍ الإرسال').then(()=>sendRecording(uri,duration));
    }
   }));
   voiceSubscriptions.current.push(MunsatAudioCapture.addListener('onRecordingCancelled',()=>{
-   if(!active)return;nativeRecordingRef.current=false;setNativeRecording(false);setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingDurationRef.current=0;void announce('تم إلغاء التسجيل');
+   if(!active)return;nativeRecordingRef.current=false;setNativeRecording(false);setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingUriRef.current=null;pendingDurationRef.current=0;void announce('تم إلغاء التسجيل');
   }));
   voiceSubscriptions.current.push(MunsatAudioCapture.addListener('onCaptureError',(event:any)=>{
    if(active){nativeRecordingRef.current=false;setNativeRecording(false);Alert.alert('خطأ في الصوت',event?.message||'تعذر استخدام الميكروفون.');}
@@ -236,7 +237,7 @@ export default function Messages(){
  async function cancelRecording(){
   if(params.voiceControl==='1'&&nativeRecordingRef.current){await MunsatAudioCapture.cancelRecording();return;}
   if(timer.current)clearTimeout(timer.current);previewPlayer.pause();const uri=pendingUri||recorder.uri;
-  if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
+  if(uri)await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});pendingUriRef.current=null;
   if(idempotencyRef.current&&uri){const ext=uri.toLowerCase().endsWith('.3gp')?'.3gp':uri.toLowerCase().endsWith('.webm')?'.webm':'.m4a';await supabase.storage.from('voice-messages').remove([idempotencyRef.current+ext]).catch(()=>{});}
   idempotencyRef.current=null;setPendingRecording(false);setPendingDuration(0);setPendingUri(null);pendingDurationRef.current=0;
  }
