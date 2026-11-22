@@ -59,8 +59,9 @@ function VoiceMessageCard({message,currentUserId,onListened}:{message:Message;cu
 }
 
 export default function Messages(){
- const params=useLocalSearchParams<{slot?:string;friendId?:string;autoRecord?:string;autoToken?:string}>();
+ const params=useLocalSearchParams<{slot?:string;friendId?:string;friendName?:string;autoRecord?:string;autoToken?:string}>();
  const friendId=typeof params.friendId==='string'?params.friendId:null;
+ const friendName=typeof params.friendName==='string'?params.friendName:'الصديق';
  const recorder=useAudioRecorder({...RecordingPresets.LOW_QUALITY, isMeteringEnabled:true});
  const state=useAudioRecorderState(recorder,200);
  const previewPlayer=useAudioPlayer(null);const previewStatus=useAudioPlayerStatus(previewPlayer);
@@ -99,7 +100,8 @@ export default function Messages(){
   if(busy)return;setBusy(true);const uri=recorder.uri;
   try{
    const target=slots.find(s=>s.slot_number===selected);
-   if(!uri||!target?.friend_id){Alert.alert('اختر صديقًا','خصص هذه الخانة لصديق من صفحة الأصدقاء أولًا.');setPendingRecording(Boolean(uri));return;}
+   const recipientId=friendId||target?.friend_id;
+   if(!uri||!recipientId){Alert.alert('اختر صديقًا','خصص هذه الخانة لصديق من صفحة الأصدقاء أولًا.');setPendingRecording(Boolean(uri));return;}
    const {data:userData}=await supabase.auth.getUser();const user=userData.user;if(!user)throw new Error('انتهت جلسة الدخول.');
    const response=await fetch(uri);const body=await response.arrayBuffer();
    const extension=uri.toLowerCase().endsWith('.3gp')?'.3gp':uri.toLowerCase().endsWith('.webm')?'.webm':'.m4a';
@@ -108,7 +110,7 @@ export default function Messages(){
    const key=idempotencyKey+extension;
    const {error:uploadError}=await supabase.storage.from('voice-messages').upload(key,body,{contentType,upsert:true});if(uploadError)throw uploadError;
    const duration=Math.min(120000,Math.max(1000,pendingDurationRef.current||Date.now()-started.current));
-   const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:target.friend_id,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey});
+   const {error:insertError}=await supabase.from('voice_messages').insert({sender_id:user.id,recipient_id:recipientId,slot_number:selected,storage_key:key,quality:'economy',duration_ms:duration,idempotency_key:idempotencyKey});
    if(insertError){const {data:existing}=await supabase.from('voice_messages').select('id').eq('idempotency_key',idempotencyKey).maybeSingle();if(!existing)throw insertError;}
    idempotencyRef.current=null;
    await FileSystem.deleteAsync(uri,{idempotent:true}).catch(()=>{});
@@ -119,7 +121,7 @@ export default function Messages(){
  async function start(slot=selected){
   if(recordingLock.current||state.isRecording)return;
   setSelected(slot);const target=slots.find(s=>s.slot_number===slot);
-  if(!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
+  if(!friendId&&!target?.friend_id){Alert.alert('الخانة فارغة','اختر صديقًا لهذه الخانة من صفحة الأصدقاء.');return;}
   recordingLock.current=true;
   try{
    const permission=await AudioModule.requestRecordingPermissionsAsync();
@@ -167,8 +169,9 @@ export default function Messages(){
  const activeFriend=slots.find(s=>s.slot_number===selected)?.friend;
  return <ScrollView style={{flex:1,backgroundColor:'#FFF'}} contentContainerStyle={{padding:22,paddingTop:62,paddingBottom:40}}>
   <View style={{flexDirection:'row-reverse',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontSize:28,fontWeight:'800',textAlign:'right',color:'#111'}}>{friendId?'المحادثة':'الرسائل الصوتية'}</Text>{friendId?<Pressable onPress={()=>router.replace('/(tabs)/messages')}><Text style={{color:'#4F9864',fontWeight:'700'}}>كل الرسائل</Text></Pressable>:null}</View>
-  <Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>{friendId?'مراسلة '+(activeFriend?.display_name||'الصديق المحدد'):'اختر صديقًا من الخانات الخمس، أو افتح مراسلته من صفحة الأصدقاء.'}</Text>
-  <View style={{flexDirection:'row-reverse',gap:8,marginBottom:22}}>{[1,2,3,4,5].map(n=>{const s=slots.find(x=>x.slot_number===n);return <Pressable key={n} disabled={state.isRecording||pendingRecording} onPress={()=>setSelected(n)} style={{flex:1,paddingVertical:13,borderRadius:12,alignItems:'center',backgroundColor:selected===n?green:'#F1F2F1',borderWidth:selected===n?1:0,borderColor:'#6EAD7D'}}><Text style={{fontWeight:'800',color:'#17251A'}}>{n}</Text>{s?.friend?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(s.friend.avatar_key).data.publicUrl}} style={{width:23,height:23,borderRadius:12,marginTop:3}}/>:null}<Text numberOfLines={1} style={{fontSize:9,color:'#555',marginTop:4}}>{s?.friend?.display_name||'فارغة'}</Text></Pressable>})}</View>
+  <Text style={{textAlign:'right',color:'#777',marginTop:7,marginBottom:22}}>{friendId?'مراسلة '+friendName:'اختر صديقًا من الخانات الخمس، أو افتح مراسلته من صفحة الأصدقاء.'}</Text>
+  {!friendId?  <View style={{flexDirection:'row-reverse',gap:8,marginBottom:22}}>{[1,2,3,4,5].map(n=>{const s=slots.find(x=>x.slot_number===n);return <Pressable key={n} disabled={state.isRecording||pendingRecording} onPress={()=>setSelected(n)} style={{flex:1,paddingVertical:13,borderRadius:12,alignItems:'center',backgroundColor:selected===n?green:'#F1F2F1',borderWidth:selected===n?1:0,borderColor:'#6EAD7D'}}><Text style={{fontWeight:'800',color:'#17251A'}}>{n}</Text>{s?.friend?.avatar_key?<Image source={{uri:supabase.storage.from('avatars').getPublicUrl(s.friend.avatar_key).data.publicUrl}} style={{width:23,height:23,borderRadius:12,marginTop:3}}/>:null}<Text numberOfLines={1} style={{fontSize:9,color:'#555',marginTop:4}}>{s?.friend?.display_name||'فارغة'}</Text></Pressable>})}</View>}:null}
+
   <View style={{backgroundColor:'#F4F5F4',borderRadius:20,padding:24,alignItems:'center'}}><Text style={{fontSize:16,color:'#555'}}>{pendingRecording?'مراجعة التسجيل':state.isRecording?'اضغط الزر الأحمر لإيقاف التسجيل':'مدة التسجيل'}</Text><Text style={{fontSize:42,fontWeight:'800',color:'#111',marginVertical:14}}>{fmt(pendingRecording?pendingDuration:(state.durationMillis||0))}</Text>
    <Text style={{color:'#777',fontSize:12,marginBottom:20}}>{pendingRecording?'استمع إلى التسجيل قبل إرساله أو ألغِه':'الحد الأقصى دقيقتان، ثم يرسل التسجيل تلقائيًا'}</Text>
    {pendingRecording?<View style={{width:'100%',gap:10}}>
