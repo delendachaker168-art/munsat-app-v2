@@ -38,8 +38,7 @@
       "versionCode": 1
     },
     "ios": {
-      "bundleIdentifier": "com.delendasmartsolutions.munsat",
-      "deploymentTarget": "15.5"
+      "bundleIdentifier": "com.delendasmartsolutions.munsat"
     },
     "owner": "delendachaker168",
     "extra": {
